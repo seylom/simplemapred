@@ -43,6 +43,11 @@ public class FileUtils {
 	 */
 	public static void sendFile(File file, NodeInfo nodeInfo,
 			String originalFileName, int chunkIndex, int numberOfChunks) {
+		
+		if (!file.exists() || !file.isFile()) {
+			System.out.println("File " + file + " could not be transferred because it does not exist.");
+			return;
+		}
 
 		// connect to node and send file for storage
 		try {
@@ -93,6 +98,7 @@ public class FileUtils {
 			System.out.println(String.format(
 					"Problem with connection to <%s:%d>",
 					nodeInfo.getHostname(), nodeInfo.getPort()));
+			
 		} catch (ClassNotFoundException e) {
 
 		}

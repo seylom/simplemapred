@@ -303,6 +303,8 @@ public class ClientNode {
 			ping = new Ping(defaultSocket, this);
 		} else {
 			ping.stop = true;
+			ping.waitStop();
+			ping = new Ping(defaultSocket, this);
 		}
 
 		// find the node to ping
@@ -321,7 +323,7 @@ public class ClientNode {
 					NodeInfo info = Helper.extractNodeInfoFromId(trackedNodeId);
 
 					ping.Initialize(info.getHostname(), info.getPort());
-					ping.run();
+					ping.autoRun();
 				}
 			}).start();
 		}

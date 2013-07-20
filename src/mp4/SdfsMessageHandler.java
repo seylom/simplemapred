@@ -72,6 +72,8 @@ public class SdfsMessageHandler extends MessageHandler{
 		String masterId = message.split(FileUtils.INFO_DELIM)[1];	
 		node.setMasterId(masterId);
 		node.log(String.format("Storing new master node info <%s>",masterId));
+		
+		node.runReplicationTask();
 	}
 
 	/**

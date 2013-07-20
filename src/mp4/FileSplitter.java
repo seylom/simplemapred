@@ -85,14 +85,22 @@ public class FileSplitter {
 	 * @param shardSize
 	 * @return
 	 */
-	public static ArrayList<File> splitByShardSize(File file, int shardSize) {
+	public static ArrayList<File> splitByShardSize(File file, int shardSize) {	
+		if (!file.isFile() || !file.exists()) {
+			System.out.println("File does not exist.");
+			return null;
+		}
+		
 		ArrayList<File> ret = new ArrayList<File>();
+		
 		long fileSize = file.length();
 		
 		if (fileSize == 0) {
-			System.out.println("File read error");
-			return null;
+			ret.add(file);
+			return ret;
 		}
+		
+		
 		
 		if (shardSize <= 0) {
 			System.out.println("shard size must be positive");

@@ -68,10 +68,15 @@ public class SdfsClient implements Runnable{
 			
 			SequenceInputStream seqStream = new SequenceInputStream(Collections.enumeration(streams));
 			
-			String folder =  "/tmp/ayivigu2_kjustic3/";
+			// String folder =  "/tmp/ayivigu2_kjustic3/";
+			String folder = FileUtils.getStoragePath(new NodeInfo(masterHost, masterPort, null));
 			File folderFile = new File(folder);
-			if (!folderFile.exists())
+			if (!folderFile.exists()) {
 				folderFile.mkdirs();
+			}
+			if (!folderFile.exists()) {
+				System.out.println("Could not create directory: " + folder);
+			}
 			
 			String fullpath = String.format("%s/%s",folder,filename);
 			FileOutputStream outputStream = new FileOutputStream(fullpath);
@@ -91,7 +96,7 @@ public class SdfsClient implements Runnable{
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
+			System.out.println("IO error within get operation");
 			e.printStackTrace();
 		}
 	}
@@ -112,7 +117,14 @@ public class SdfsClient implements Runnable{
 	 */
 	public void put(String filename, String destination){ 
 		File f = new File(filename);
+		if (!f.exists() || !f.isFile()) {
+			System.out.println(filename + ": file not found.");
+		}
+		
 		final ArrayList<File> chunks = FileSplitter.splitByShardSize(f, FileUtils.BLOCK_SIZE);	
+		
+		if (chunks == null || chunks.size() == 0)
+			return;
 		
 		clientProtocol.initialize(masterHost, masterPort);
 		
@@ -146,7 +158,7 @@ public class SdfsClient implements Runnable{
 			
 			System.out.println("File to save to sdfs: " + sdfsDestination);
 			
-			for(int k=0; k< chunks.size();k++){
+			for(int k = 0; k < chunks.size(); k++){
 				 int id = Integer.parseInt(ids[k]);
 				 final NodeInfo nodeInfo = Helper.extractNodeInfoFromId(map.get(id));
 				 
@@ -156,10 +168,15 @@ public class SdfsClient implements Runnable{
 					 @Override
 					 public void run(){
 						 final File chunk = chunks.get(idx);
+						 if (!chunk.exists() || !chunk.isFile()) {
+								System.out.println("file chunk could not be found.");
+						 }
+						 
 						 FileUtils.sendFile(chunk, nodeInfo, sdfsDestination, idx, chunks.size());
 						 
 						 //delete local chunk
-						 chunk.delete();
+						 if (chunks.size() > 1)
+							 chunk.delete();
 					 }
 				 }).start();
 				 
@@ -179,7 +196,7 @@ public class SdfsClient implements Runnable{
 		try {
 			clientProtocol.deleteFile(filename);
 		} catch (ClassNotFoundException e) {
-			// TODO Auto-generated catch block
+			System.out.println("Could not delete " + filename);
 			e.printStackTrace();
 		}
 	}
@@ -223,7 +240,7 @@ public class SdfsClient implements Runnable{
 		while(true){
 			try {
 				String input = br.readLine();
-				String [] info =  input.toLowerCase().split(" ");
+				String [] info =  input.split(" ");
 				
 				if (info[0].equals("quit")){
 					break;
@@ -231,6 +248,7 @@ public class SdfsClient implements Runnable{
 					processInteractiveCommand(info);
 				}
 			} catch (IOException e) { 
+				System.out.println("Input line from prompt could not be read");
 				e.printStackTrace();
 			}	
 		}

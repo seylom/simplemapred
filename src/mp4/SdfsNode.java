@@ -130,6 +130,9 @@ public class SdfsNode extends ClientNode {
 	 */
 	public synchronized void setMasterId(String masterId) {
 		this.masterNodeId = masterId;
+		
+		if (this.masterNodeId.equals(getNodeId()))
+			this.isMaster = true;
 	}
 	
 	/**
@@ -218,7 +221,6 @@ public class SdfsNode extends ClientNode {
 				nodeInfo.getPort()));
 		
 		runReplicationTask();
-	
 	}
 		
 	/**
@@ -320,6 +322,8 @@ public class SdfsNode extends ClientNode {
 	 * Performs a replication process
 	 */
 	public synchronized void performFileReplication(){
+		
+		log("Starting replication...");
 		
 		replicationOngoing = true;
 		
@@ -440,6 +444,9 @@ public class SdfsNode extends ClientNode {
 					 ArrayList<String> candidates = getReplicationDestination(repCount,exceptList);
 
 					 //actual replication
+					 if (exceptList == null) 
+						 exceptList =  new HashSet<String>();
+					 
 					 replicate(file,blockIndex,candidates,new ArrayList<String>(exceptList));
 				 }		 
 			 }

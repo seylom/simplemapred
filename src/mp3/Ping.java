@@ -14,6 +14,7 @@ public class Ping implements Runnable {
 	
 	public volatile boolean stop = false;
 	private ClientNode client;
+	private Thread currentThread;
 	
 	
 	/**
@@ -30,7 +31,7 @@ public class Ping implements Runnable {
 			socket = new DatagramSocket();
 			socket.setSoTimeout(TIMEOUT_TIME);	
 			
-			//start();			
+			currentThread = new Thread(this);
 		}
 		
 		catch (IOException e) {
@@ -46,6 +47,8 @@ public class Ping implements Runnable {
 		failure = false;
 		this.socket = socket;
 		this.client = client;
+		
+		currentThread = new Thread(this);
 	}
 	
 	/**
@@ -63,23 +66,21 @@ public class Ping implements Runnable {
 		}
 	}
 	
-	public void run() {
-		pingLoop();
-		
-		(new Thread(){
-			@Override
-			public void run(){
-				pingLoop();
-			}
-		}).start();
-	}	
+	public void autoRun(){
+		currentThread.run();
+	}
+	
+	public void stop(){
+		currentThread.interrupt();
+	}
 	
 	/**
 	 * Sends a ping to target machine every PING_FREQ ms, then waits for ack response.
 	 * Upon waiting for more than TIMEOUT_TIME ms, failure is indicated.
 	 */
-	private void pingLoop() {
-		while (!stop) {
+	@Override
+	public void run(){
+		while (!stop && !Thread.interrupted()) {
 			// send ping
 			// wait PING_FREQ then repeat			
 					 
@@ -88,14 +89,14 @@ public class Ping implements Runnable {
 			
 			try {
 				Thread.sleep(PING_FREQ);
+				
+				if (!client.getAckReceived() && !stop){
+					failure = true;
+					stop = true;
+					client.notifyUnreachable();
+				}		
 			} catch (InterruptedException e) {
 				System.out.println("Sleep interrupted");
-			}
-			 
-			if (!client.getAckReceived()){
-				failure = true;
-				stop = true;
-				client.notifyUnreachable();
 			}
 		}
 	}
@@ -106,6 +107,13 @@ public class Ping implements Runnable {
 	 */
 	public boolean getFailure() {
 		return failure;
+	}
+
+	public void waitStop() {
+		try {
+			currentThread.join();
+		} catch (InterruptedException e) {
+		}
 	}
 	
 }

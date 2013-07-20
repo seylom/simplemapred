@@ -1,5 +1,4 @@
-package mp4; 
-
+package mp4;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
