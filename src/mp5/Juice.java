@@ -8,16 +8,32 @@ import java.util.HashMap;
 
 public class Juice {
 	
-	private static int fileCount;
-	private static int numJuices;
-	private static String prefix;
-	private static String destPath;
-	private static ArrayList<String> fileList;
+	private int fileCount;
+	private int numJuices;
+	private String prefix;
+	private String destPath;
+	private ArrayList<String> fileList;
 	// Mapping of juice task number to keys it is responsible for
 	private static HashMap<Integer, ArrayList<String>> jobMap;
 	
 	/** This will need to be changed - used for local testing  **/
-	private static String localPath = "C:/Users/pie/workspace/mp5";
+	private static String localPath = "/tmp/ayivigu2_kjustic3/maplejuice/map_keyfiles/"; //"C:/Users/pie/workspace/mp5";
+	
+	
+	/**
+	 * @param numJuices
+	 * @param prefix
+	 * @param destPath
+	 */
+	public Juice(int numJuices,String prefix,String destPath){
+		this.numJuices =numJuices;
+		this.prefix = prefix;
+		this.destPath = destPath;
+		
+		fileCount = countFiles();
+		
+		divideJobs();
+	}
 	
 	/**
 	 * Class entry point
@@ -26,7 +42,7 @@ public class Juice {
 	public static void main(String args[]) {
 		// Command line checks
 		if (args.length != 4) {
-			System.out.println("Usage: java Juice <juice_job> <num_juices>" +
+			System.out.println("Usage: java Juice <juice_exe> <num_juices>" +
 					" <file_prefix> <destination_file>");
 			return;
 		}
@@ -37,17 +53,17 @@ public class Juice {
 		}
 		
 		// Initialization of key variables
-		numJuices = Integer.parseInt(args[1]);
-		prefix = args[2];
-		destPath = args[3];
+		int numJuices = Integer.parseInt(args[1]);
+		String prefix = args[2];
+		String destPath = args[3];
 		if (new File(destPath).exists()) {
 			new File(destPath).delete();	// Because WordCount appends to destination file
 		}
 		
-		fileCount = countFiles();		
+				
 		// System.out.println("Files starting with prefix " + prefix + ": " + fileCount + "\n");
 		
-		divideJobs();
+		
 		/*for (int i = 0; i < jobMap.size(); i++) {
 			System.out.println("Key[" + i + "]:");
 			for (int j = 0; j < jobMap.get(i).size(); j++) {
@@ -55,14 +71,15 @@ public class Juice {
 			}
 		}*/
 		
-		doJuice();
+		Juice jc = new Juice(numJuices, prefix, destPath);
+		jc.doJuice();
 	}
-		
+
 	/**
 	 * Counts number of files beginning with SDFS prefix
 	 * @return number of files beginning with SDFS prefix
 	 */
-	public static int countFiles() {
+	private int countFiles() {
 		File directory = new File(localPath);
 		
 		// Filter for files beginning with prefix
@@ -92,7 +109,7 @@ public class Juice {
 	/**
 	 * Assigns keys to juice tasks, placing results in jobMap
 	 */
-	private static void divideJobs() {
+	private void divideJobs() {
 		jobMap = new HashMap<Integer, ArrayList<String>>();
 		int jobsPerJuice = (int) Math.ceil((double) fileCount / numJuices);
 		ArrayList<String> tempKeyList;
@@ -114,12 +131,11 @@ public class Juice {
 	 * Execute the given juice task (in this case, call WordCount)
 	 * for each 
 	 */
-	private static void doJuice() {
+	public void doJuice() {
 		for (int i = 0; i < jobMap.size(); i++) {
 			for (int j = 0; j < jobMap.get(i).size(); j++) {
-				new WordCountJuice(jobMap.get(i).get(j), destPath);
+				new WordCountJuice(String.format("%s/%s",localPath,jobMap.get(i).get(j)), destPath);
 			}
 		}	
 	}
-	
 }

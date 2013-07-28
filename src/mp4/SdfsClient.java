@@ -201,6 +201,52 @@ public class SdfsClient implements Runnable{
 		}
 	}
 	
+	/**
+	 * @param commandInfos
+	 */
+	public void maple(String [] commandInfos){
+		
+		String exe = commandInfos[1];
+		String prefix = commandInfos[2];
+		
+		ArrayList<String> files = new ArrayList<String>();
+		
+		for(int k=3; k< commandInfos.length; k++){
+			files.add(commandInfos[k].trim());
+		}
+		
+		try {
+			
+			clientProtocol.sendProgram(exe);
+			clientProtocol.sendMapleMessage(exe, prefix, files);
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}	
+	}
+	
+	/**
+	 * @param commandInfos
+	 */
+	public void juice(String [] commandInfos){
+		String exe = commandInfos[1];
+		String numberOfJuices = commandInfos[2];
+		String prefix = commandInfos[3];
+		String destinationSdfs = commandInfos[4];
+		
+		try {
+			
+			clientProtocol.sendJuiceMessage(exe,
+					Integer.parseInt(numberOfJuices),
+					prefix, destinationSdfs);
+			
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}	
+	}
+	
+	
 	public static void main(String[] args){
 
 		if (args.length < 2){
@@ -229,6 +275,12 @@ public class SdfsClient implements Runnable{
 		}else if(commandInfos[0].equals("delete")){
 			if (commandInfos.length > 1)
 				delete(commandInfos[1]);
+		}else if(commandInfos[0].equals("maple")){
+			if (commandInfos.length > 3)
+				maple(commandInfos);
+		}else if(commandInfos[0].equals("juice")){
+			if (commandInfos.length > 3)
+				juice(commandInfos);
 		}
 	}
 

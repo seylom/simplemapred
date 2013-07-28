@@ -16,6 +16,8 @@ import mp3.ClientNode;
 import mp3.Helper;
 import mp3.MessageHandler;
 import mp3.NodeInfo;
+import mp5.JobTracker;
+import mp5.TaskTracker;
 
 public class SdfsNode extends ClientNode {
 
@@ -34,6 +36,9 @@ public class SdfsNode extends ClientNode {
 	
 	private Timer replicationTimer;
 	private volatile boolean replicationOngoing;
+	
+	private JobTracker jobTracker;
+	public volatile boolean jobRunning;
 	
 	/**
 	 * @param hostname
@@ -131,8 +136,11 @@ public class SdfsNode extends ClientNode {
 	public synchronized void setMasterId(String masterId) {
 		this.masterNodeId = masterId;
 		
-		if (this.masterNodeId.equals(getNodeId()))
+		if (this.masterNodeId.equals(getNodeId())){
 			this.isMaster = true;
+		}else{
+			this.isMaster = false;
+		}		
 	}
 	
 	/**
@@ -541,6 +549,109 @@ public class SdfsNode extends ClientNode {
 	@Override
 	public void startLogQuerierServer(final String logname){
 		
+	}
+	
+	/**
+	 * @param exe
+	 * @param prefix
+	 * @param sdfsFiles
+	 * 
+	 * Initializes maple job for execution across nodes, tracks progress and restart tasks if necessary.
+	 * It also notifies the front-end of job progress.
+	 */
+	public void initializeMapleJob(final String exe,final String prefix,final ArrayList<String> sdfsFiles){
+		
+		if (!getIsMaster())
+			return;
+		
+		if (!jobRunning)
+			jobRunning = true;
+		
+		jobTracker = new JobTracker(this);
+		
+		(new Thread(){
+			@Override
+			public void run(){	
+				jobTracker.startMapleJob(exe, prefix, sdfsFiles);
+			}
+		}).start();
+	}
+	
+	/**
+	 * @param exe
+	 * @param inputFile
+	 * @param outputFile
+	 * 
+	 * executes a maple task
+	 */
+	public void doMapleTask(int taskId,String exe, String prefix, String sdfsFileName){
+		TaskTracker tracker = new TaskTracker(this,taskId); 
+		tracker.startMapleJob(exe, prefix, sdfsFileName);
+	}
+	
+	/**
+	 * @param exe
+	 * @param numberOfJuices
+	 * @param prefix
+	 * @param destinationSdfs
+	 * 
+	 * initializes Juice Job for execution across nodes, track progress and restart tasks if necessary.
+	 */
+	public void initializeJuiceJob(final String exe,final int numberOfJuices,
+			final String prefix,final String destinationSdfs) {
+		
+		if (!getIsMaster())
+			return;
+
+		jobTracker = new JobTracker(this);
+		
+		(new Thread(){
+			@Override
+			public void run(){		
+				jobTracker.startJuiceJob(exe, numberOfJuices, prefix, destinationSdfs);
+			}
+		}).start();
+	}
+	
+	/**
+	 * @param exe
+	 * @param inputFile
+	 * @param outputFile
+	 * 
+	 * executes a juice task
+	 */
+	public void doJuiceTask(int taskId,String exe, String sourceFile,String destinationFile){		
+		TaskTracker tracker = new TaskTracker(this,taskId); 
+		tracker.startJuiceJob(exe, sourceFile, destinationFile);
+	}
+	
+	/**
+	 * Report task progress to the master node
+	 * @param taskType
+	 */
+	public void reportTaskProgress(int taskId,String taskType,String status) {		
+		String message = String.format("%s:%s:%d:%s:%s", SdfsMessageHandler.TASK_REPORT_PREFIX,
+				getNodeId(),taskId,taskType, status);
+		
+		NodeInfo masterNode = Helper.extractNodeInfoFromId(getMasterId());
+		
+		Helper.sendUnicastMessage(getSocket(), message, masterNode.getHostname(), masterNode.getPort());
+		
+		log(String.format("Task report for %s task %d : %s",taskType, taskId, status));
+	}
+	
+	/**
+	 * @param nodeId
+	 * @param status
+	 */
+	public void saveTaskProgress(String nodeId,int taskId,String taskType, String status){
+		if (!getIsMaster())
+			return;
+			
+		if (jobTracker == null)
+			return;
+		
+		jobTracker.notifyTaskProgress(nodeId,taskId,taskType, status);
 	}
 
 	/**

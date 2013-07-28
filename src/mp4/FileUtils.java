@@ -7,6 +7,9 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 
 import mp3.NodeInfo;
 
@@ -23,6 +26,7 @@ public class FileUtils {
 	public static final String TRANSFER_OVER_PREFIX = "transfer_over";
 	public static final String TRANSFER_OK_PREFIX = "transfer_ok";
 	public static final String GREP_PREFIX = "grep";
+	public static final String SENDING_PROGRAM_PREFIX = "sending_program";
 
 	/**
 	 * @param info
@@ -31,7 +35,24 @@ public class FileUtils {
 	 *         Retrieve storage path for Sdfs save/read operations
 	 */
 	public static String getStoragePath(NodeInfo info) {
-		return String.format("/tmp/ayivigu2_kjustic3/%s-%d",
+		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/sdfs/",
+				info.getHostname(), info.getPort());
+	}
+	
+
+	public static String getConfigStorageFolder(NodeInfo info) {
+		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/config/",
+				info.getHostname(), info.getPort());
+	}
+	
+	/**
+	 * @param info
+	 * @return
+	 * 
+	 *         Retrieve storage path for maple juice local files
+	 */
+	public static String getMapleJuiceStoragePath(NodeInfo info) {
+		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/maplejuice/",
 				info.getHostname(), info.getPort());
 	}
 
@@ -114,5 +135,145 @@ public class FileUtils {
 
 		if (file.exists())
 			file.delete();
+	}
+	
+	/**
+	 * Returns all files stored in the SDFS system
+	 * @param node
+	 * @return
+	 */
+	public static Set<String> getStoredSdfsFiles(SdfsNode node){
+		return node.fileMetadata.keySet();
+	}
+	
+	/**
+	 * @param node
+	 * @return
+	 */
+	public static synchronized HashMap<String, HashMap<Integer,Set<String>>> 
+			getFileToBlocksLocationMap(SdfsNode node){
+		
+		//given a file as key we have a map which gives for each block of the file
+		//the set of nodes which currently store that block
+		HashMap<String, HashMap<Integer,Set<String>>> fileToBlockHolders =  
+				new HashMap<String, HashMap<Integer,Set<String>> >();
+		
+		for(String nodeId:node.sdfsMetadata.keySet()){
+			 
+			 HashMap<String,Set<Integer>> fileBlocks = node.sdfsMetadata.get(nodeId);	 
+
+			 for(String file:fileBlocks.keySet()){
+				 
+				 HashMap<Integer,Set<String>> blockHolders;
+				 
+				 if (!fileToBlockHolders.containsKey(file)){
+					 blockHolders = new HashMap<Integer,Set<String>>();
+					 fileToBlockHolders.put(file, blockHolders);
+				 }else{
+					 blockHolders = fileToBlockHolders.get(file);
+				 }
+				  
+				 for(int blockIndex:fileBlocks.get(file)){
+					 Set<String> holders ;
+					 
+					 if (blockHolders.containsKey(blockIndex)){
+						 holders = blockHolders.get(blockIndex) ;					
+					 }else{
+						 holders = new HashSet<String>(); 
+					 }
+					 
+					 holders.add(nodeId);
+					 blockHolders.put(blockIndex, holders);
+				 }	
+			 }
+		 }
+		
+		return fileToBlockHolders;
+	}
+	
+	/**
+	 * Given a file, we retrieve a map of block to SdfsNode
+	 * This method is used to locate blocks in the system.
+	 * @param node
+	 * @param sdfsFileName
+	 * @return
+	 */
+	public static synchronized HashMap<Integer,Set<String>> getSdfsFileBlockLocations(SdfsNode node, String sdfsFileName){
+		HashMap<Integer,Set<String>> blockLocationMap = null;
+		
+		HashMap<String, HashMap<Integer,Set<String>>> map = getFileToBlocksLocationMap(node);
+		
+		if (map.containsKey(sdfsFileName)){
+			blockLocationMap = map.get(sdfsFileName);
+		}
+		
+		return blockLocationMap;
+	}
+	
+	/**
+	 * @param file
+	 * @param nodeInfo
+	 * 
+	 *            send a file to a host
+	 */
+	public static void uploadProgram(File file, String hostname,int port) {
+		
+		if (!file.exists() || !file.isFile()) {
+			System.out.println("File " + file + " could not be transferred because it does not exist.");
+			return;
+		}
+
+		// connect to node and send file for storage
+		try {
+			Socket socket = new Socket();
+			socket.connect(new InetSocketAddress(hostname,
+					port), 5000);
+
+			socket.setSoTimeout(10000);
+
+			ObjectOutputStream oos = new ObjectOutputStream(
+					socket.getOutputStream());
+
+			ObjectInputStream ois = new ObjectInputStream(
+					socket.getInputStream());
+
+			int streamSize = 4096;
+			byte[] buffer = new byte[streamSize];
+
+			String message = String.format("%s:%s",
+					FileUtils.SENDING_PROGRAM_PREFIX,file.getName());
+
+			oos.writeObject(message);
+
+			FileInputStream fileStream = new FileInputStream(file);
+
+			int number;
+			while ((number = fileStream.read(buffer)) != -1) { 
+				oos.write(buffer,0,number); 
+			}
+
+			fileStream.close();
+
+			// notify of transfer completion
+			oos.writeObject(FileUtils.TRANSFER_OVER_PREFIX);
+
+			String transferOkFailMessage = (String) ois.readObject();
+
+			if (transferOkFailMessage.startsWith(TRANSFER_OK_PREFIX)) { 
+				ois.close();
+				oos.close();
+				socket.close();
+			}
+		} catch (UnknownHostException e) {
+			System.out.println(String.format("Unable to find host <%s:%d>",
+					hostname, port));
+		} catch (IOException e) {
+			System.out.println(String.format(
+					"Problem with connection to <%s:%d>",
+					hostname, port));
+			
+		} catch (ClassNotFoundException e) {
+
+		}
 	}
 }

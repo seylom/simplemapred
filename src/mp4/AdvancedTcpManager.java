@@ -8,6 +8,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays; 
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -91,6 +92,12 @@ public class AdvancedTcpManager implements Runnable {
 			doGet(message, oos, ois);
 		}else if (message.startsWith(ClientProtocol.BLOCK_REQUEST)){
 			doSendBlock(message, oos, ois);
+		}else if (message.startsWith(ClientProtocol.MAPLE_OP)){
+			doMaple(message, oos, ois);
+		}else if (message.startsWith(ClientProtocol.JUICE_OP)){
+			doJuice(message, oos, ois);
+		}else if (message.startsWith(FileUtils.SENDING_PROGRAM_PREFIX)){
+			doSaveProgram(message, oos, ois);
 		}
 	}
 
@@ -275,13 +282,11 @@ public class AdvancedTcpManager implements Runnable {
 		try {
 
 			oos.writeObject(response);
-			oos.writeObject("completed");
+			
+			sendEndOfCommMessage(oos);
 
 			this.node.log("Sending datanode candidates for file storage");
-
-			// oos.close();
-			// ois.close();
-
+			
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -300,15 +305,8 @@ public class AdvancedTcpManager implements Runnable {
 	public void doGet(String message, ObjectOutputStream oos,
 			ObjectInputStream ois) {
 		
-		if (!node.getIsMaster()){
-			
-			try {
-				oos.writeObject("completed");
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			
+		if (!node.getIsMaster()){	
+			sendEndOfCommMessage(oos);		
 			return;
 		}
 			
@@ -357,7 +355,9 @@ public class AdvancedTcpManager implements Runnable {
 		
 		try {
 			oos.writeObject(response);
-			oos.writeObject("completed");
+			
+			sendEndOfCommMessage(oos);
+			
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -373,12 +373,7 @@ public class AdvancedTcpManager implements Runnable {
 		if (!node.getIsMaster())
 			return;
 
-		try {
-			oos.writeObject("completed");
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		sendEndOfCommMessage(oos);
 
 		String[] info = message.split(FileUtils.INFO_DELIM);
 		String sdfsFileName = info[1];
@@ -456,6 +451,138 @@ public class AdvancedTcpManager implements Runnable {
 				e1.printStackTrace();
 		} catch (ClassNotFoundException e) {
 			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}	
+	
+	/**
+	 * @param message
+	 * @param oos
+	 * @param ois
+	 */
+	public void doMaple(String message, ObjectOutputStream oos,
+			ObjectInputStream ois){
+		
+		if (!node.getIsMaster())
+			return;
+		
+		sendEndOfCommMessage(oos);
+		
+		String [] info = message.split(FileUtils.INFO_DELIM);
+		
+		String exe = info[1];
+		String prefix = info[2];
+		String [] files = info[3].split(FileUtils.LIST_DELIM);
+		
+		ArrayList<String> sdfsFiles = new ArrayList<String>(Arrays.asList(files));
+		
+		//process maple message
+		node.initializeMapleJob(exe, prefix, sdfsFiles);
+	}
+	
+	/**
+	 * @param message
+	 * @param oos
+	 * @param ois
+	 */
+	public void doJuice(String message, ObjectOutputStream oos,
+			ObjectInputStream ois){
+		
+		if (!node.getIsMaster())
+			return;
+		
+		sendEndOfCommMessage(oos);
+		
+		String [] info = message.split(FileUtils.INFO_DELIM);
+		
+		String exe = info[1];
+		int numberOfJuices = Integer.parseInt(info[2]);
+		String prefix = info[3];
+		String destinationSdfs = info[4];
+		 
+		//process juice message
+		node.initializeJuiceJob(exe,numberOfJuices, prefix, destinationSdfs);
+	}
+	
+	private void doSaveProgram(String message, ObjectOutputStream oos,
+			ObjectInputStream ois) throws FileNotFoundException{
+		
+		String info[] = message.split(FileUtils.INFO_DELIM);
+		String programName = info[1]; 
+
+		String folderPath = FileUtils.getConfigStorageFolder(Helper
+				.extractNodeInfoFromId(node.getNodeId()));
+		
+		File folder = new File(folderPath);
+		if (!folder.exists())
+			folder.mkdirs();
+
+		String filepath = String.format("%s/%s", folderPath, programName);
+
+		FileOutputStream fos = new FileOutputStream(filepath);
+
+		int donwloadStreamSize = 4096;
+
+		byte[] buffer = new byte[donwloadStreamSize];
+		int bytesRead = 0;
+
+		while (bytesRead >= 0) {
+			try {
+				bytesRead = ois.read(buffer);
+
+				if (bytesRead >= 0) {
+					fos.write(buffer, 0, bytesRead);
+				}
+
+				if (bytesRead == -1) {
+
+					fos.flush();
+					fos.close();
+
+					try {
+						String messageOver = (String) ois.readObject();
+
+						if (messageOver.contains(FileUtils.TRANSFER_OVER_PREFIX)) {
+
+							oos.writeObject(FileUtils.TRANSFER_OK_PREFIX);
+
+							ois.close();
+							oos.close();
+
+							this.node.log("Program saved successfully");
+						}
+					} catch (ClassNotFoundException e){
+						
+					}
+					 catch (IOException e) {
+						// TODO Auto-generated catch block
+						System.out.println("Error during file block transfer");
+						e.printStackTrace();
+					}
+
+					this.node.log("Program saved successfully");
+
+					break;
+				}
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	
+	/**
+	 * @param oos
+	 */
+	private void sendEndOfCommMessage(ObjectOutputStream oos){
+		
+		if (oos == null)
+			return;
+		
+		try {
+			oos.writeObject(ClientProtocol.END_OF_COMM);
+		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}

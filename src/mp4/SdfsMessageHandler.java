@@ -19,10 +19,14 @@ public class SdfsMessageHandler extends MessageHandler{
 	public static final String DELETE_FILE_PREFIX = "remove";
 	public static final String DELETE_FILE_META_PREFIX = "metadata_delete_file";
 	public static final String REPLICATE_BLOCK_PREFIX = "replicate";
-	
-	//public static final String GET_MESSAGE_PREFIX = "get";
-	//public static final String PUT_MESSAGE_PREFIX = "put";
-	//public static final String DELETE_MESSAGE_PREFIX = "delete";
+	public static final String MAPLE_PREFIX = "do_maple"; 
+	public static final String JUICE_PREFIX = "do_juice";
+	public static final String TASK_REPORT_PREFIX = "task_report";
+	public static final String TASK_REPORT_BUSY_PREFIX = "task_busy";
+	public static final String TASK_REPORT_COMPLETED_PREFIX = "task_completed";
+	public static final String TASK_REPORT_FAILED_PREFIX = "task_failed";
+	public static final String MAPLE = "maple";
+	public static final String JUICE = "juice";
 	
 	private SdfsNode node;
 	
@@ -61,6 +65,12 @@ public class SdfsMessageHandler extends MessageHandler{
 		}
 		else if (message.startsWith(REPLICATE_BLOCK_PREFIX)){
 			replicateFile(message);
+		}else if (message.startsWith(MAPLE_PREFIX)){
+			performMaple(message);
+		}else if (message.startsWith(JUICE_PREFIX)){
+			performJuice(message);
+		}else if (message.startsWith(TASK_REPORT_PREFIX)){
+			performTaskReport(message);
 		}
 	}
 	
@@ -175,6 +185,52 @@ public class SdfsMessageHandler extends MessageHandler{
 		
 		node.log(String.format("Replicating block %d of file %s to <%s:%d>",blockIndex,filename,
 				nodeInfo.getHostname(),nodeInfo.getPort()));
+	}
+	
+	/**
+	 * @param message
+	 */
+	private void performMaple(String message){
+		String[] info = message.split(FileUtils.INFO_DELIM);
+		
+		int taskId = Integer.parseInt(info[1]);
+		String exe = info[2];
+		String prefix = info[3];
+		String sdfsFileName = info[4];
+		
+		node.doMapleTask(taskId, exe, prefix, sdfsFileName);
+		
+		node.log(String.format("Starting maple task %d",taskId));
+	}
+	
+	/**
+	 * @param message
+	 */
+	private void performJuice(String message){
+		String[] info = message.split(FileUtils.INFO_DELIM);
+		
+		int taskId = Integer.parseInt(info[1]);
+		String exe = info[2];
+		String sourceFile = info[3];
+		String destFile = info[4];
+		
+		node.doJuiceTask(taskId, exe, sourceFile, destFile);
+		
+		node.log(String.format("Starting juice task %d",taskId));
+	}
+	
+	/**
+	 * @param message
+	 */
+	private void performTaskReport(String message){
+		String[] info = message.split(FileUtils.INFO_DELIM);
+		
+		String nodeSource = info[1];
+		int taskId = Integer.parseInt(info[2]); 
+		String taskType = info[3]; 
+		String status = info[4]; 
+		
+		node.saveTaskProgress(nodeSource,taskId,taskType, status); 
 	}
 }
 

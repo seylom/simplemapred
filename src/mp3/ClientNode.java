@@ -246,7 +246,6 @@ public class ClientNode {
 	public void checkJoinStatus() {
 		if (!membershipAccepted) {
 			log("unable to join the group");
-
 			reset();
 		}
 	}

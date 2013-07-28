@@ -7,7 +7,9 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 
+import mp3.Helper;
 import mp3.NodeInfo;
 
 public class ClientProtocol {
@@ -16,6 +18,9 @@ public class ClientProtocol {
 	public static String GET_OP = "get_op";
 	public static String DEL_OP = "del_op";
 	public static String BLOCK_REQUEST = "block_request";
+	public static String MAPLE_OP = "maple";
+	public static String JUICE_OP = "juice";
+	public static String END_OF_COMM = "completed";
 
 	public static boolean stop = false;
 
@@ -236,5 +241,48 @@ public class ClientProtocol {
 		}
 
 		return filepath;
+	}
+	
+	/**
+	 * @param exe
+	 * @param prefix
+	 * @param fileListString
+	 * @return
+	 * @throws ClassNotFoundException
+	 */
+	public String sendMapleMessage(String exe,String prefix,ArrayList<String> files) throws ClassNotFoundException{
+	 
+		String fileListString =  Helper.join(files,FileUtils.LIST_DELIM); 
+		
+		String message = String.format("%s:%s:%s:%s", MAPLE_OP, exe,prefix,fileListString);
+		String result = sendMessageToMasterNodeWithResponse("maple", message);
+
+		return result;
+	}
+	
+	/**
+	 * @param exe
+	 * @param prefix
+	 * @param fileListString
+	 * @return
+	 * @throws ClassNotFoundException
+	 */
+	public String sendJuiceMessage(String exe,int numberOfJuices,String prefix,String destination) throws ClassNotFoundException{
+	 
+		String message = String.format("%s:%s:%d:%s:%s", JUICE_OP, exe,
+				numberOfJuices,prefix,destination);
+		
+		String result = sendMessageToMasterNodeWithResponse("juice", message);
+
+		return result;
+	}
+
+	/**
+	 * Send an executable program to the master node
+	 * @param exe
+	 */
+	public void sendProgram(String exe) {	
+		File exeFile = new File(exe);
+		FileUtils.uploadProgram(exeFile, this.masterHost,this.masterPort);
 	}
 }
