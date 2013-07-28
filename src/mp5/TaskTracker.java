@@ -3,6 +3,8 @@ package mp5;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import mp3.Helper;
 import mp3.NodeInfo;
@@ -74,9 +76,21 @@ public class TaskTracker {
 						});
 
 						if (files.length > 0) {
+							
+							Pattern p = Pattern.compile(".part(\\d+)$");
+							Matcher matcher = p.matcher(filename);
+							
+							int index = 0;
+							
+							if (matcher.find()){
+								String idx = matcher.group(1);
+								
+								index = Integer.parseInt(idx);
+							}
+								
 							for (int k = 0; k < files.length; k++) {
 								String sdfsname = files[k].getName();						
-								FileUtils.sendFile(files[k], nodeInfo, sdfsname, 1, 0);
+								FileUtils.sendFile(files[k], nodeInfo, sdfsname, index, 0);
 							}
 						}
 					}
