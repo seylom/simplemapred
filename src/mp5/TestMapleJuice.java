@@ -59,7 +59,7 @@ public class TestMapleJuice {
 
 		Thread.sleep(1000);
 
-		for (int i = 0; i < 3; i++) {
+		for (int i = 0; i < 2; i++) {
 			final int idx = i;
 			(new Thread() {
 				public void run() {
@@ -81,7 +81,7 @@ public class TestMapleJuice {
 		
 		client.maple(new String[]{"maple","maple_exe.jar","mj","sdfstestfile"});
 		
-		Thread.sleep(5000);
+		Thread.sleep(3000);
 		
 		client.juice(new String[]{"juice","juice_exe.jar","3","mj","destination_sdfsfile"});
 	}

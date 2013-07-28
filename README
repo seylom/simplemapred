@@ -1,6 +1,24 @@
-************************************************
+******************************************************************************
 *		Maple Juice								
-************************************************
-*
+******************************************************************************
 *	Seylom Ayivi - Kevin Mason Justice
-************************************************
+******************************************************************************
+
+Compilation instructions:
+
+1- navigate to the MapleJuice folder.
+
+
+compile word count programs using the 4 commands below
+
+javac -d maple_exe/ -sourcepath maple_exe maple_exe/*.java
+jar -cfm maple_exe.jar maple_exe/Manifest.txt -C maple_exe WordCountMaple.class
+
+javac -d juice_exe/ -sourcepath juice_exe juice_exe/*.java
+jar -cfm juice_exe.jar juice_exe/Manifest.txt -C juice_exe WordCountJuice.class
+
+
+Compile the MapleJuice program:
+
+javac -d bin/ src/mp2/*.java src/mp3/*.java src/mp4/*.java src/mp5/*.java
+

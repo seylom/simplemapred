@@ -20,7 +20,8 @@ public class JobTracker {
 	private HashMap<String,TaskHearbeat> taskToHeartbeatMap;
 	public volatile boolean completed;
 	public volatile boolean jobRunning;
-	private HashSet<String> taskNodes;
+	private HashSet<String> mapleTaskNodes;
+	private HashSet<String> juiceTaskNodes;
 	
 	/**
 	 * @param node
@@ -37,10 +38,10 @@ public class JobTracker {
 	 */
 	public void startMapleJob(String exe,String prefix,ArrayList<String> sdfsFiles){
 		jobRunning = true;
-		taskNodes = new HashSet<String>();
+		mapleTaskNodes = new HashSet<String>();
 		taskToHeartbeatMap = new HashMap<String,TaskHearbeat>();
 		Random rd = new Random();
-		NodeInfo currentNodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
+		
 		int taskId = 1;
 		
 		//1- first locate node which have the data
@@ -57,23 +58,9 @@ public class JobTracker {
 			for(int blockId:blockLocations.keySet()){
 				
 				ArrayList<String> locations = new ArrayList<String>(blockLocations.get(blockId));
-				String candidateNodeId = locations.get(rd.nextInt(blockLocations.size()));	
+				String candidateNodeId = locations.get(rd.nextInt(locations.size()));	
 				
-				if (!taskNodes.contains(candidateNodeId)){
-					//send program to node
-					NodeInfo candidateNodeInfo = Helper.extractNodeInfoFromId(candidateNodeId);
-					String configPath = FileUtils.getConfigStorageFolder(currentNodeInfo);
-					String programPath = String.format("%s/%s", configPath,exe);
-					
-					File prog = new File(programPath);
-					if (prog.exists()){
-						FileUtils.uploadProgram(prog,
-								candidateNodeInfo.getHostname(), 
-								candidateNodeInfo.getPort());
-						
-						taskNodes.add(candidateNodeId);
-					}		
-				}
+				sendProgramToNode(candidateNodeId,exe,mapleTaskNodes);
 				
 				String sdfsFileName = String.format("%s.part%d",file, blockId);
 				
@@ -94,16 +81,18 @@ public class JobTracker {
 	 */
 	public void startJuiceJob(String exe,int numberOfJuices, String prefix, String destinationSdfs){
 		jobRunning = true;
-		
+		juiceTaskNodes = new HashSet<String>();
 		taskToHeartbeatMap = new HashMap<String,TaskHearbeat>();
 		int taskId = 0;
 		
 		Random rd = new Random();
 		
-	    HashMap<String,String> fileKeysToJuiceNodeMap  = new HashMap<String,String>();
+	    //HashMap<String,String> fileKeysToJuiceNodeMap  = new HashMap<String,String>();
 		
 		//identify nodes which hold files with a particular prefix have a given prefix
-		//and do not currently run a maple or juice task 
+		//and do not currently run a maple or juice task    
+	    //each file should be attributed to a single reduce node, although multiple keys can all be
+	    //assign to the same node
 		
 		synchronized(node.fileMetadata){
 			
@@ -119,25 +108,77 @@ public class JobTracker {
 				
 				HashMap<Integer,Set<String>> blockLocations = FileUtils.getSdfsFileBlockLocations(node,sdfsFile);
 				
-				if (blockLocations == null)
-					continue;
+				//get the locations of the first block
+				ArrayList<String> locations = new ArrayList<String>(blockLocations.get(0));
 				
+				//get a random candidate which will fetch all blocks of the current targetfile
+				String candidateNodeId = locations.get(rd.nextInt(locations.size()));		
 				
-				for(int blockId:blockLocations.keySet()){
-								
-					ArrayList<String> locations = new ArrayList<String>(blockLocations.get(blockId));				
-					String candidateNodeId = locations.get(rd.nextInt(blockLocations.size()));				
-								
-					String message = String.format("%s:%s:%s:%s:%s", SdfsMessageHandler.JUICE_PREFIX,
-							taskId, exe, sdfsFile, destinationSdfs);
+				sendProgramToNode(candidateNodeId,exe,juiceTaskNodes);
+				
+				//send juice message to candidate node in order to fetch blocks and juice them
+				String message = String.format("%s:%s:%s:%s:%s", SdfsMessageHandler.JUICE_PREFIX,
+										taskId, exe, sdfsFile, destinationSdfs);
+				
+				assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
+				
+				taskId+=1;
+				
+//				HashMap<Integer,Set<String>> blockLocations = FileUtils.getSdfsFileBlockLocations(node,sdfsFile);
+//				
+//				if (blockLocations == null)
+//					continue;
+//							
+//				for(int blockId:blockLocations.keySet()){
+//								
+//					ArrayList<String> locations = new ArrayList<String>(blockLocations.get(blockId));				
+//					String candidateNodeId = locations.get(rd.nextInt(blockLocations.size()));				
+//						
+//					sendProgramToNode(candidateNodeId,exe,juiceTaskNodes);
+//					
+//					String message = String.format("%s:%s:%s:%s:%s", SdfsMessageHandler.JUICE_PREFIX,
+//							taskId, exe, sdfsFile, destinationSdfs);
+//					
+//					assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
+//					
+//					taskId+=1;
+//				}
+			}
+		}
+	}
+	
+	
+	/**
+	 * @param candidateNodeId
+	 * @param exe
+	 * @param taskNodes
+	 */
+	private void sendProgramToNode(String candidateNodeId, String exe, HashSet<String> taskNodes){
+		
+		NodeInfo currentNodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
+		
+		synchronized(taskNodes){
+			if (!taskNodes.contains(candidateNodeId)){
+				//send program to node
+				NodeInfo candidateNodeInfo = Helper.extractNodeInfoFromId(candidateNodeId);
+				String configPath = FileUtils.getConfigStorageFolder(currentNodeInfo);
+				String programPath = String.format("%s/%s", configPath,exe);
+				
+				File prog = new File(programPath);
+				if (prog.exists()){
+					FileUtils.uploadProgram(prog,
+							candidateNodeInfo.getHostname(), 
+							candidateNodeInfo.getPort());
 					
-					assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
-					
-					taskId+=1;
+					taskNodes.add(candidateNodeId);
+				}else{
+					node.log(String.format("Unable to find the program %s in the master node",exe));
+					System.out.println(String.format("File not found in master node: %s",exe));
 				}
 			}
 		}
 	}
+	
 
 	/**
 	 * @param nodeId

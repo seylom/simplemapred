@@ -236,6 +236,7 @@ public class SdfsClient implements Runnable{
 		
 		try {
 			
+			clientProtocol.sendProgram(exe);
 			clientProtocol.sendJuiceMessage(exe,
 					Integer.parseInt(numberOfJuices),
 					prefix, destinationSdfs);

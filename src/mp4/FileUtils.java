@@ -27,6 +27,18 @@ public class FileUtils {
 	public static final String TRANSFER_OK_PREFIX = "transfer_ok";
 	public static final String GREP_PREFIX = "grep";
 	public static final String SENDING_PROGRAM_PREFIX = "sending_program";
+	
+	public enum TaskType{
+		MAPLE,
+		JUICE
+	}
+	
+	public enum TaskStatus{
+		PAUSED,
+		RUNNING,
+		SUCCESS,
+		FAILURE,	
+	}
 
 	/**
 	 * @param info
@@ -43,6 +55,23 @@ public class FileUtils {
 	public static String getConfigStorageFolder(NodeInfo info) {
 		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/config/",
 				info.getHostname(), info.getPort());
+	}
+	
+	public static boolean deleteDirectory(File directory) {
+	    if(directory.exists()){
+	        File[] files = directory.listFiles();
+	        if(null!=files){
+	            for(int i=0; i<files.length; i++) {
+	                if(files[i].isDirectory()) {
+	                    deleteDirectory(files[i]);
+	                }
+	                else {
+	                    files[i].delete();
+	                }
+	            }
+	        }
+	    }
+	    return(directory.delete());
 	}
 	
 	/**

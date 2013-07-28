@@ -1,4 +1,5 @@
 package mp4;
+import java.io.File;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket; 
@@ -30,9 +31,6 @@ public class SdfsNode extends ClientNode {
 	
 	//Holds file to block count information
 	public HashMap<String,Integer> fileMetadata;
-	
-	//Holds file to replica information
-	//private HashMap<String,Integer> fileToReplicaMetadata;
 	
 	private Timer replicationTimer;
 	private volatile boolean replicationOngoing;
@@ -98,10 +96,15 @@ public class SdfsNode extends ClientNode {
 		if (this.isMaster) {
 			masterNodeId = this.clientId;
 		}
+		
+		NodeInfo currentNodeInfo = Helper.extractNodeInfoFromId(this.getNodeId());
+		
+		File storageFolder = new File(FileUtils.getStoragePath(currentNodeInfo));
+		
+		if (storageFolder.exists()){
+			FileUtils.deleteDirectory(storageFolder);
+		}
 
-		//currentNodeBlocks = new HashMap<String, ArrayList<Integer>>();
-		//fileToNumberOfBlockMetadata = new HashMap<String,Integer>();
-		//nodeToBlocksMetadata = new HashMap<String,Set<Integer>>();
 		sdfsMetadata = new HashMap<String, HashMap<String,Set<Integer>>>();
 		fileMetadata = new HashMap<String,Integer>();
 
@@ -473,30 +476,63 @@ public class SdfsNode extends ClientNode {
 	 */
 	private void replicate(String sdfsFileName,int blockIndex,ArrayList<String> destinations,ArrayList<String> sources){
 		
-		//int k = 0;
 		Random rd = new Random();
 		
-		for(String nodeId:destinations){
+		for(String destinationId:destinations){
 			
 			 System.out.println(String.format("Replication of block %d of file %s assigned to [%s]",
 					 blockIndex,sdfsFileName,Helper.join(destinations)));
 			 
-			 int numBlocks = fileMetadata.get(sdfsFileName);
-			 
-			 String message = String.format("%s:%s:%s:%d:%d", SdfsMessageHandler.REPLICATE_BLOCK_PREFIX,
-					 									nodeId,
-					 									sdfsFileName,
-					 									blockIndex,
-					 									numBlocks);
-			 
 			 String sourceId = sources.get(rd.nextInt(sources.size()));
 			 
-			 NodeInfo destinationInfo = Helper.extractNodeInfoFromId(sourceId);
+//			 int numBlocks = fileMetadata.get(sdfsFileName);
+//			 
+//			 String message = String.format("%s:%s:%s:%d:%d", SdfsMessageHandler.REPLICATE_BLOCK_PREFIX,
+//					 									destinationId,
+//					 									sdfsFileName,
+//					 									blockIndex,
+//					 									numBlocks);
+//			 
+//			 String sourceId = sources.get(rd.nextInt(sources.size()));
+//			 
+//			 NodeInfo destinationInfo = Helper.extractNodeInfoFromId(sourceId);
+//			 
+//			 Helper.sendUnicastMessage(getSocket(), message, 
+//					 destinationInfo.getHostname(), destinationInfo.getPort());
 			 
-			 Helper.sendUnicastMessage(getSocket(), message, 
-					 destinationInfo.getHostname(), destinationInfo.getPort());
+			 transferBlock(sourceId,destinationId,sdfsFileName,blockIndex);
+		}
+	}
+	
+	/**
+	 * Transfers a block from one node to another
+	 * 
+	 * @param sourceId
+	 * @param destinationId
+	 * @param sdfsFileName
+	 * @param blockIndex
+	 */
+	public void transferBlock(String sourceId,String destinationId,String sdfsFileName,int blockIndex){
+		synchronized(fileMetadata){
+			int numBlocks = fileMetadata.get(sdfsFileName);
+			
+			String message = String.format("%s:%s:%s:%d:%d", SdfsMessageHandler.REPLICATE_BLOCK_PREFIX,
+						destinationId,
+						sdfsFileName,
+						blockIndex,
+						numBlocks);
+			
+			NodeInfo sourceInfo = Helper.extractNodeInfoFromId(sourceId);
+			NodeInfo destinationInfo = Helper.extractNodeInfoFromId(destinationId);
 			 
-			 //k+=1;
+			Helper.sendUnicastMessage(getSocket(), message, 
+					sourceInfo.getHostname(), sourceInfo.getPort());
+			
+			log(String.format("Transfering block from <%s:%d> to <%s:%d>", 
+					sourceInfo.getHostname(),
+					sourceInfo.getPort(),
+					destinationInfo.getHostname(),
+					destinationInfo.getPort()));
 		}
 	}
 	
@@ -622,7 +658,11 @@ public class SdfsNode extends ClientNode {
 	 */
 	public void doJuiceTask(int taskId,String exe, String sourceFile,String destinationFile){		
 		TaskTracker tracker = new TaskTracker(this,taskId); 
-		tracker.startJuiceJob(exe, sourceFile, destinationFile);
+		try {
+			tracker.startJuiceJob(exe, sourceFile, destinationFile);
+		} catch (IOException e) {
+			 e.printStackTrace();
+		}
 	}
 	
 	/**
