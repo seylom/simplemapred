@@ -1,7 +1,8 @@
 package mp4;
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File; 
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -49,9 +50,18 @@ public class SdfsClient implements Runnable{
 		try {
 			
 			filename = filename.replace("/", "_");
+			
 			String result = clientProtocol.getFile(filename);
 			
+			if (result == null || result.equals("")){
+				System.out.println(String.format("Client - The file %s was not found on SDFS",filename));
+				return;
+			}
+			
 			String [] nodeIdList = result.split(FileUtils.LIST_DELIM);
+			
+			if (nodeIdList == null || nodeIdList.length == 0)
+				return;
 			
 			int blockIndex = 0;
 			ArrayList<InputStream> streams = new ArrayList<InputStream>();
@@ -59,27 +69,35 @@ public class SdfsClient implements Runnable{
 			//Download files to local directory
 			for(String nodeId:nodeIdList){
 				String partName = String.format("%s.part%d",filename,blockIndex);
-				String destinationPath = clientProtocol.downloadFile(partName,Helper.extractNodeInfoFromId(nodeId));
+				
+				//String destinationPath = ClientProtocol.downloadFile(partName,Helper.extractNodeInfoFromId(nodeId));
+				
+				ByteArrayOutputStream stream = FileUtils.downloadStream(partName, Helper.extractNodeInfoFromId(nodeId));
+				
+				ByteArrayInputStream inputStream = new ByteArrayInputStream(stream.toByteArray());
 				
 				blockIndex+=1;
 				
-				streams.add(new FileInputStream(new File(destinationPath)));
+				streams.add(inputStream);
 			}
 			
 			SequenceInputStream seqStream = new SequenceInputStream(Collections.enumeration(streams));
 			
 			// String folder =  "/tmp/ayivigu2_kjustic3/";
-			String folder = FileUtils.getStoragePath(new NodeInfo(masterHost, masterPort, null));
-			File folderFile = new File(folder);
-			if (!folderFile.exists()) {
-				folderFile.mkdirs();
-			}
-			if (!folderFile.exists()) {
-				System.out.println("Could not create directory: " + folder);
-			}
 			
-			String fullpath = String.format("%s/%s",folder,filename);
-			FileOutputStream outputStream = new FileOutputStream(fullpath);
+//			String folder = FileUtils.getStoragePath(new NodeInfo(masterHost, masterPort, null));
+//			
+//			File folderFile = new File(folder);
+//			if (!folderFile.exists()) {
+//				folderFile.mkdirs();
+//			}
+//			if (!folderFile.exists()) {
+//				System.out.println("Could not create directory: " + folder);
+//			}
+			
+			//String fullpath = String.format("%s/%s",folder,filename);
+			
+			FileOutputStream outputStream = new FileOutputStream(filename);
 			
 			byte[] buffer = new byte[1024];
 			int len;
@@ -90,7 +108,7 @@ public class SdfsClient implements Runnable{
 			outputStream.close();
 			seqStream.close();
 			
-			System.out.println(String.format("Client - file retrieved and saved at %s",fullpath));
+			System.out.println(String.format("Client - file retrieved and saved at %s",filename));
 			
 		} catch (ClassNotFoundException  e) {
 			// TODO Auto-generated catch block

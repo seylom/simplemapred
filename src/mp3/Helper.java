@@ -68,8 +68,6 @@ public class Helper {
 	 */
 	public static NodeInfo extractNodeInfoFromId(String nodeId){
 		
-		//System.out.println(nodeId);
-		
 		String [] info = nodeId.split("\\|",3);
 		
 		String timestamp = info[0];

@@ -11,18 +11,6 @@ import mp4.SdfsNode;
  */
 public class TestMapleJuice {
 
-	/**
-	 * 
-	 */
-	public void test_maple() {
-
-		WordCountMaple mp = new WordCountMaple("../testfile", "temp");
-		mp.doMaple();
-
-		//Juice jc = new Juice(3, "temp_example", "finalfile");
-		//jc.doJuice();
-	}
-	
 	public void test_jar_with_processbuilder(){
 		
 		String exe = "/tmp/ayivigu2_kjustic3/localhost-10000/maplejuice/maple_exe.jar";
@@ -59,7 +47,7 @@ public class TestMapleJuice {
 
 		Thread.sleep(1000);
 
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < 6; i++) {
 			final int idx = i;
 			(new Thread() {
 				public void run() {
@@ -74,16 +62,27 @@ public class TestMapleJuice {
 
 		// initiate a transfer
 		SdfsClient client = new SdfsClient("localhost", 10000);
-		client.put("/home/seylom/projects/CS425/MapleJuice/testfile",
-				"sdfstestfile");
+		
+		client.put("/home/seylom/projects/CS425/MapleJuice/simplefile1",
+				"sdfstestfile1");
+		
+		client.put("/home/seylom/projects/CS425/MapleJuice/simplefile2",
+				"sdfstestfile2");
+		
+		client.put("/home/seylom/projects/CS425/MapleJuice/simplefile3",
+				"sdfstestfile3");
  
 		Thread.sleep(3000);
 		
-		client.maple(new String[]{"maple","maple_exe.jar","mj","sdfstestfile"});
+		client.maple(new String[]{"maple","maple_exe.jar","mj","sdfstestfile1","sdfstestfile2","sdfstestfile3"});
 		
-		Thread.sleep(3000);
+		Thread.sleep(10000);
 		
 		client.juice(new String[]{"juice","juice_exe.jar","3","mj","destination_sdfsfile"});
+		
+		Thread.sleep(10000);
+		
+		client.get("destination_sdfsfile");
 	}
 
 	/**

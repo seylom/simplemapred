@@ -2,10 +2,12 @@ package mp5;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
+import java.util.Set; 
+import java.util.regex.Pattern;
 
 import mp3.Helper;
 import mp3.NodeInfo;
@@ -46,6 +48,8 @@ public class JobTracker {
 		
 		//1- first locate node which have the data
 		for(String file: sdfsFiles){
+			
+			System.out.println(file);
 			
 			if (!node.fileMetadata.keySet().contains(file)){
 				System.out.println(String.format("%s not found in SDFS system",file));
@@ -104,7 +108,24 @@ public class JobTracker {
 				}
 			}
 			
+			Pattern p = Pattern.compile("_task(\\d+)");
+			
+			HashSet<String> mapKeys = new HashSet<String>();
+			
+			//Sort keys in order to process and output results in order
+			Collections.sort(targetSdfsFiles);
+			
+			//SDFS map files follow the template prefix_key_taskId
+			//we need to remove the taskId part from the name in order to allow 
+			//juice nodes to aggregate prefix_key file blocks together.
 			for(String sdfsFile:targetSdfsFiles){
+				
+				String keyString = sdfsFile.replaceAll(p.pattern(), "");
+				
+				if (mapKeys.contains(keyString))
+					continue;
+				
+				mapKeys.add(keyString);
 				
 				HashMap<Integer,Set<String>> blockLocations = FileUtils.getSdfsFileBlockLocations(node,sdfsFile);
 				
@@ -118,31 +139,11 @@ public class JobTracker {
 				
 				//send juice message to candidate node in order to fetch blocks and juice them
 				String message = String.format("%s:%s:%s:%s:%s", SdfsMessageHandler.JUICE_PREFIX,
-										taskId, exe, sdfsFile, destinationSdfs);
+										taskId, exe, keyString, destinationSdfs);
 				
 				assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
 				
 				taskId+=1;
-				
-//				HashMap<Integer,Set<String>> blockLocations = FileUtils.getSdfsFileBlockLocations(node,sdfsFile);
-//				
-//				if (blockLocations == null)
-//					continue;
-//							
-//				for(int blockId:blockLocations.keySet()){
-//								
-//					ArrayList<String> locations = new ArrayList<String>(blockLocations.get(blockId));				
-//					String candidateNodeId = locations.get(rd.nextInt(blockLocations.size()));				
-//						
-//					sendProgramToNode(candidateNodeId,exe,juiceTaskNodes);
-//					
-//					String message = String.format("%s:%s:%s:%s:%s", SdfsMessageHandler.JUICE_PREFIX,
-//							taskId, exe, sdfsFile, destinationSdfs);
-//					
-//					assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
-//					
-//					taskId+=1;
-//				}
 			}
 		}
 	}

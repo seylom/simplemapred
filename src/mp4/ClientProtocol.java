@@ -6,6 +6,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 
@@ -86,11 +87,13 @@ public class ClientProtocol {
 			socket.close();
 
 		} catch (UnknownHostException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			System.out.println(String.format("The host <%s:%d> cannot be found." +
+					" Please check your master hostname and port",masterHost,masterPort));			
+		} catch (SocketTimeoutException e){
+			System.out.println("Client - TIMEOUT: The master node did not replied in the alloted time.");		
+		}
+		catch (IOException e) {
+			System.out.println("A problem occur during communication with the master node");
 		}
 
 		return result;
@@ -149,7 +152,7 @@ public class ClientProtocol {
 	 * @param filename
 	 * @param nodeInfo
 	 */
-	public String downloadFile(String filename, NodeInfo nodeInfo) {
+	public static String downloadFile(String filename, NodeInfo nodeInfo) {
 
 		String filepath = "";
 		String message = String.format("%s:%s", BLOCK_REQUEST, filename);

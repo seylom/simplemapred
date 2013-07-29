@@ -182,9 +182,7 @@ public class AdvancedTcpManager implements Runnable {
 
 							ois.close();
 							oos.close();
-
-							this.node.log(String.format("Block Sent: file [%s] - block id %d successful.",
-													sdfsFileName, chunkIndex));
+ 
 						}
 					} catch (ClassNotFoundException e){
 						
@@ -210,23 +208,25 @@ public class AdvancedTcpManager implements Runnable {
 		node.addBlockInfo(this.node.getNodeId(), sdfsFileName, chunkIndex,
 				chunkCount);
 
-		// broadcast chunk reception to the rest of the membership for storage
-		synchronized (node.membershipList) {
-
-			ArrayList<String> recipients = new ArrayList<String>();
-			for (String nodeId : node.membershipList) {
-				if (!nodeId.equals(node.getNodeId())) {
-					recipients.add(nodeId);
-				}
-			}
-
-			String metadataMessage = String.format("%s:%s:%s:%d:%d",
-					SdfsMessageHandler.SAVE_BLOCK_META_PREFIX,
-					node.getNodeId(), sdfsFileName, chunkIndex, chunkCount);
-
-			Helper.sendBMulticastMessage(node.getSocket(), metadataMessage,
-					recipients);
-		}
+//		// broadcast chunk reception to the rest of the membership for storage
+//		synchronized (node.membershipList) {
+//
+//			ArrayList<String> recipients = new ArrayList<String>();
+//			for (String nodeId : node.membershipList) {
+//				if (!nodeId.equals(node.getNodeId())) {
+//					recipients.add(nodeId);
+//				}
+//			}
+//
+//			String metadataMessage = String.format("%s:%s:%s:%d:%d",
+//					SdfsMessageHandler.SAVE_BLOCK_META_PREFIX,
+//					node.getNodeId(), sdfsFileName, chunkIndex, chunkCount);
+//
+//			Helper.sendBMulticastMessage(node.getSocket(), metadataMessage,
+//					recipients);
+//		}
+		
+		node.notifyChunckReception( sdfsFileName, chunkIndex, chunkCount);
 	}
 
 	/**

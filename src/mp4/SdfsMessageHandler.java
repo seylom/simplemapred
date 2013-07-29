@@ -183,8 +183,8 @@ public class SdfsMessageHandler extends MessageHandler{
 				
 		FileUtils.sendFile(new File(filePath), nodeInfo, filename, blockIndex, numberOfBlock);
 		
-		node.log(String.format("Replicating block %d of file %s to <%s:%d>",blockIndex,filename,
-				nodeInfo.getHostname(),nodeInfo.getPort()));
+		//node.log(String.format("Replicating block %d of file %s to <%s:%d>",blockIndex,filename,
+		//		nodeInfo.getHostname(),nodeInfo.getPort()));
 	}
 	
 	/**
@@ -214,9 +214,8 @@ public class SdfsMessageHandler extends MessageHandler{
 		String sourceFile = info[3];
 		String destFile = info[4];
 		
-		node.doJuiceTask(taskId, exe, sourceFile, destFile);
-		
-		node.log(String.format("Starting juice task %d",taskId));
+		node.doJuiceTask(taskId, exe, sourceFile, destFile);	
+		node.log(String.format("Starting juice task %d for key %s",taskId,sourceFile));
 	}
 	
 	/**

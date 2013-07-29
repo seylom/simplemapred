@@ -97,20 +97,36 @@ public class SdfsNode extends ClientNode {
 			masterNodeId = this.clientId;
 		}
 		
-		NodeInfo currentNodeInfo = Helper.extractNodeInfoFromId(this.getNodeId());
+		cleanupExistingFiles();
 		
-		File storageFolder = new File(FileUtils.getStoragePath(currentNodeInfo));
-		
-		if (storageFolder.exists()){
-			FileUtils.deleteDirectory(storageFolder);
-		}
-
 		sdfsMetadata = new HashMap<String, HashMap<String,Set<Integer>>>();
 		fileMetadata = new HashMap<String,Integer>();
 
 		super.initialize();
 
 		startAdvancedConnectionManager();
+	}
+	
+	/**
+	 * 
+	 */
+	private void cleanupExistingFiles(){
+		NodeInfo currentNodeInfo = Helper.extractNodeInfoFromId(this.getNodeId());
+		
+		File storageFolder = new File(FileUtils.getStoragePath(currentNodeInfo));
+		if (storageFolder.exists()){
+			FileUtils.deleteDirectory(storageFolder);
+		}
+		
+		File mjFolder = new File(FileUtils.getMapleJuiceStoragePath(currentNodeInfo));
+		if (mjFolder.exists()){
+			FileUtils.deleteDirectory(mjFolder);
+		}
+		
+		File configFolder = new File(FileUtils.getConfigStorageFolder(currentNodeInfo));
+		if (configFolder.exists()){
+			FileUtils.deleteDirectory(configFolder);
+		}
 	}
 
 	@Override
@@ -190,6 +206,32 @@ public class SdfsNode extends ClientNode {
 			DatagramPacket packet, ClientNode node) {
 		return new SdfsMessageHandler(socket, packet, (SdfsNode) node);
 	}
+	
+	/**
+	 * Broadcast chunk reception information to the rest of the membership
+	 * 
+	 * @param sdfsFileName
+	 * @param chunkIndex
+	 * @param chunkCount
+	 */
+	public void notifyChunckReception(String sdfsFileName,int chunkIndex,int chunkCount){	 
+		synchronized (membershipList) {
+
+			ArrayList<String> recipients = new ArrayList<String>();
+			for (String nodeId : membershipList) {
+				if (!nodeId.equals(getNodeId())) {
+					recipients.add(nodeId);
+				}
+			}
+
+			String metadataMessage = String.format("%s:%s:%s:%d:%d",
+					SdfsMessageHandler.SAVE_BLOCK_META_PREFIX,
+					getNodeId(), sdfsFileName, chunkIndex, chunkCount);
+
+			Helper.sendBMulticastMessage(getSocket(), metadataMessage,
+					recipients);
+		}
+	}
 
 	
 	/**
@@ -216,11 +258,37 @@ public class SdfsNode extends ClientNode {
 			
 		if (fileToStoredBlocks.containsKey(sdfsFileName)){
 			Set<Integer> blocks = fileToStoredBlocks.get(sdfsFileName);
-			blocks.add(chunkIndex);
+			blocks.add(chunkIndex);		
 		}else{
 			Set<Integer> blocks = new HashSet<Integer>();
 			blocks.add(chunkIndex);
 			fileToStoredBlocks.put(sdfsFileName, blocks);
+		}
+		
+		if (chunkCount == 0){
+			//compute and update chunk count
+			
+			synchronized(sdfsMetadata){
+				
+				HashSet<Integer> blockIds = new HashSet<Integer>();
+				
+				for(String nId: sdfsMetadata.keySet()){
+					HashMap<String,Set<Integer>> fileToBlockMap = sdfsMetadata.get(nId);
+					
+					for(String file:fileToBlockMap.keySet()){
+						if (!file.equals(sdfsFileName))
+							continue;
+						
+						ArrayList<Integer> blockList = new ArrayList<Integer>(fileToBlockMap.get(file));
+						
+						for(int blockKey:blockList){
+							blockIds.add(blockKey);
+						}
+					}
+				}
+				
+				fileMetadata.put(sdfsFileName, blockIds.size());
+			}
 		}
 		
 		NodeInfo nodeInfo = Helper.extractNodeInfoFromId(nodeId);
@@ -483,24 +551,11 @@ public class SdfsNode extends ClientNode {
 			 System.out.println(String.format("Replication of block %d of file %s assigned to [%s]",
 					 blockIndex,sdfsFileName,Helper.join(destinations)));
 			 
-			 String sourceId = sources.get(rd.nextInt(sources.size()));
-			 
-//			 int numBlocks = fileMetadata.get(sdfsFileName);
-//			 
-//			 String message = String.format("%s:%s:%s:%d:%d", SdfsMessageHandler.REPLICATE_BLOCK_PREFIX,
-//					 									destinationId,
-//					 									sdfsFileName,
-//					 									blockIndex,
-//					 									numBlocks);
-//			 
-//			 String sourceId = sources.get(rd.nextInt(sources.size()));
-//			 
-//			 NodeInfo destinationInfo = Helper.extractNodeInfoFromId(sourceId);
-//			 
-//			 Helper.sendUnicastMessage(getSocket(), message, 
-//					 destinationInfo.getHostname(), destinationInfo.getPort());
-			 
-			 transferBlock(sourceId,destinationId,sdfsFileName,blockIndex);
+			 if (sources.size() > 0){
+				 String sourceId = sources.get(rd.nextInt(sources.size()));
+				 	 
+				 transferBlock(sourceId,destinationId,sdfsFileName,blockIndex);
+			 }
 		}
 	}
 	

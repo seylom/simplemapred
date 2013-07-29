@@ -1,4 +1,5 @@
 package mp4;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -39,6 +40,17 @@ public class FileUtils {
 		SUCCESS,
 		FAILURE,	
 	}
+	
+	/**
+	 * @param info
+	 * @return
+	 * 
+	 *         Retrieve storage path for Sdfs save/read operations
+	 */
+	public static String getBasePath(NodeInfo info) {
+		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/",
+				info.getHostname(), info.getPort());
+	}
 
 	/**
 	 * @param info
@@ -47,13 +59,13 @@ public class FileUtils {
 	 *         Retrieve storage path for Sdfs save/read operations
 	 */
 	public static String getStoragePath(NodeInfo info) {
-		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/sdfs/",
+		return String.format("%s/sdfs/",getBasePath(info),
 				info.getHostname(), info.getPort());
 	}
 	
 
 	public static String getConfigStorageFolder(NodeInfo info) {
-		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/config/",
+		return String.format("%s/config/",getBasePath(info),
 				info.getHostname(), info.getPort());
 	}
 	
@@ -81,7 +93,7 @@ public class FileUtils {
 	 *         Retrieve storage path for maple juice local files
 	 */
 	public static String getMapleJuiceStoragePath(NodeInfo info) {
-		return String.format("/tmp/ayivigu2_kjustic3/%s-%d/maplejuice/",
+		return String.format("%s/maplejuice/",getBasePath(info),
 				info.getHostname(), info.getPort());
 	}
 
@@ -89,7 +101,7 @@ public class FileUtils {
 	 * @param file
 	 * @param nodeInfo
 	 * 
-	 *            send a file to a host
+	 * send a file to a host
 	 */
 	public static void sendFile(File file, NodeInfo nodeInfo,
 			String originalFileName, int chunkIndex, int numberOfChunks) {
@@ -187,35 +199,37 @@ public class FileUtils {
 		HashMap<String, HashMap<Integer,Set<String>>> fileToBlockHolders =  
 				new HashMap<String, HashMap<Integer,Set<String>> >();
 		
-		for(String nodeId:node.sdfsMetadata.keySet()){
-			 
-			 HashMap<String,Set<Integer>> fileBlocks = node.sdfsMetadata.get(nodeId);	 
-
-			 for(String file:fileBlocks.keySet()){
+		synchronized(node.sdfsMetadata){
+			for(String nodeId:node.sdfsMetadata.keySet()){
 				 
-				 HashMap<Integer,Set<String>> blockHolders;
-				 
-				 if (!fileToBlockHolders.containsKey(file)){
-					 blockHolders = new HashMap<Integer,Set<String>>();
-					 fileToBlockHolders.put(file, blockHolders);
-				 }else{
-					 blockHolders = fileToBlockHolders.get(file);
-				 }
-				  
-				 for(int blockIndex:fileBlocks.get(file)){
-					 Set<String> holders ;
+				 HashMap<String,Set<Integer>> fileBlocks = node.sdfsMetadata.get(nodeId);	 
+	
+				 for(String file:fileBlocks.keySet()){
 					 
-					 if (blockHolders.containsKey(blockIndex)){
-						 holders = blockHolders.get(blockIndex) ;					
+					 HashMap<Integer,Set<String>> blockHolders;
+					 
+					 if (!fileToBlockHolders.containsKey(file)){
+						 blockHolders = new HashMap<Integer,Set<String>>();
+						 fileToBlockHolders.put(file, blockHolders);
 					 }else{
-						 holders = new HashSet<String>(); 
+						 blockHolders = fileToBlockHolders.get(file);
 					 }
-					 
-					 holders.add(nodeId);
-					 blockHolders.put(blockIndex, holders);
-				 }	
+					  
+					 for(int blockIndex:fileBlocks.get(file)){
+						 Set<String> holders ;
+						 
+						 if (blockHolders.containsKey(blockIndex)){
+							 holders = blockHolders.get(blockIndex) ;					
+						 }else{
+							 holders = new HashSet<String>(); 
+						 }
+						 
+						 holders.add(nodeId);
+						 blockHolders.put(blockIndex, holders);
+					 }	
+				 }
 			 }
-		 }
+		}
 		
 		return fileToBlockHolders;
 	}
@@ -304,5 +318,96 @@ public class FileUtils {
 		} catch (ClassNotFoundException e) {
 
 		}
+	}
+	
+	/**
+	 * @param filename
+	 * @param nodeInfo
+	 */
+	public static ByteArrayOutputStream downloadStream(String filename, NodeInfo nodeInfo) {
+
+		ByteArrayOutputStream fos = null;
+		 
+		String message = String.format("%s:%s", ClientProtocol.BLOCK_REQUEST, filename);
+
+		try {
+
+			Socket socket = new Socket();
+
+			socket.connect(new InetSocketAddress(nodeInfo.getHostname(),
+					nodeInfo.getPort()), 5000);
+			socket.setSoTimeout(10000);
+
+			ObjectOutputStream oos = new ObjectOutputStream(
+					socket.getOutputStream());
+
+			ObjectInputStream ois = new ObjectInputStream(
+					socket.getInputStream());
+
+			// sends our message
+			oos.writeObject(message);
+
+			fos = new ByteArrayOutputStream();
+
+			int donwloadStreamSize = 4096;
+
+			byte[] buffer = new byte[donwloadStreamSize];
+			int bytesRead = 0;
+
+			while (bytesRead >= 0) {
+				try {
+					bytesRead = ois.read(buffer);
+
+					if (bytesRead >= 0) {
+						fos.write(buffer, 0, bytesRead);
+					}
+
+					if (bytesRead == -1) {
+
+						fos.flush();
+						fos.close();
+
+						try {
+							String messageOver = (String) ois.readObject();
+
+							if (messageOver
+									.contains(FileUtils.TRANSFER_OVER_PREFIX)) {
+
+								oos.writeObject(FileUtils.TRANSFER_OK_PREFIX);
+
+								ois.close();
+								oos.close();
+
+								System.out.println(String.format("File block downloaded : file [%s] ",filename));
+							}
+						} catch (ClassNotFoundException e){
+							
+						}
+						catch (IOException e) {
+							// TODO Auto-generated catch block
+							System.out
+									.println("Error during file block transfer");
+							e.printStackTrace();
+						}
+
+						break;
+					}
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
+			
+			socket.close();
+			
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+		return fos;
 	}
 }

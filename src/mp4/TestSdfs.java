@@ -194,6 +194,10 @@ public class TestSdfs {
 		SdfsClient client = new SdfsClient("localhost", 10000);
 		client.put("/tmp/ayivigu2_kjustic3/log_10", "/temp/log1");
 		
+		Thread.sleep(5000);
+		
+		client.get("/temp/log1");
+		
 		//Thread.sleep(5000);
 		//client.delete("/temp/log1");
 	}
@@ -236,6 +240,6 @@ public class TestSdfs {
 	public static void main(String[] args) throws InterruptedException{
 		TestSdfs test = new TestSdfs();
 		
-		test.start_3_nodes_and_transfer_a_file_then_crash_master();
+		test.start_7_nodes_and_transfer_a_file_then_delete();
 	}
 }
