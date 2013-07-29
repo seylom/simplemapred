@@ -27,6 +27,9 @@ public class SdfsMessageHandler extends MessageHandler{
 	public static final String TASK_REPORT_FAILED_PREFIX = "task_failed";
 	public static final String MAPLE = "maple";
 	public static final String JUICE = "juice";
+	public static final String ELECT_SECONDARY_MESSAGE_PREFIX = "electsecondary";
+	public static final String COORD_SECONDARY_MESSAGE_PREFIX = "coordsecondary";
+	public static final String JOB_INFO = "job_info";
 	
 	private SdfsNode node;
 	
@@ -71,6 +74,12 @@ public class SdfsMessageHandler extends MessageHandler{
 			performJuice(message);
 		}else if (message.startsWith(TASK_REPORT_PREFIX)){
 			performTaskReport(message);
+		}else if (message.startsWith(ELECT_SECONDARY_MESSAGE_PREFIX)){
+			electSecondary(message);
+		}else if (message.startsWith(COORD_SECONDARY_MESSAGE_PREFIX)){
+			updateSecondaryMaster(message);
+		}else if (message.startsWith(JOB_INFO)){
+			storeJobInfo(message);
 		}
 	}
 	
@@ -230,6 +239,44 @@ public class SdfsMessageHandler extends MessageHandler{
 		String status = info[4]; 
 		
 		node.saveTaskProgress(nodeSource,taskId,taskType, status); 
+	}
+	
+	
+	/**
+	 * @param message
+	 */
+	private void electSecondary(String message){
+		node.setSecondaryMasterId(node.getNodeId());
+		
+		String replyMessage = String.format("%s:%s", COORD_SECONDARY_MESSAGE_PREFIX,node.getNodeId());
+		
+		NodeInfo nodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
+		
+		Helper.sendBMulticastMessage(node.getSocket(), replyMessage, 
+				node.membershipList);
+		
+		node.log(String.format("Broadcasting secondary master information to the membership: <%s:%d>",
+				nodeInfo.getHostname(),nodeInfo.getPort()));
+	}
+ 
+	/**
+	 * Updates secondary master information
+	 * @param message
+	 */
+	private void updateSecondaryMaster(String message){
+		String[] info = message.split(FileUtils.INFO_DELIM);
+		String nodeSource = info[1];
+		
+		if (nodeSource.equals(node.getSecondaryMasterId()))
+			return;
+		
+		node.setSecondaryMasterId(nodeSource);
+		node.log("Updating secondary master information");
+	}
+	
+	private void storeJobInfo(String message){
+		node.saveJobInfo(message);
+		node.log("Saving job info");
 	}
 }
 

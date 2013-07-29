@@ -28,6 +28,10 @@ public class SdfsClient implements Runnable{
 	private ClientProtocol clientProtocol;
 	private String masterHost;
 	private int masterPort;
+	
+	private String secondaryHost;
+	private int secondaryPort;
+	
 	private boolean stop;
 	
 	/**
@@ -39,6 +43,7 @@ public class SdfsClient implements Runnable{
 		masterPort = port;
 		
 		clientProtocol = new ClientProtocol();
+		clientProtocol.initializePrimary(masterHost, masterPort);
 		
 		Thread t = new Thread(this);
 		t.start();
@@ -145,7 +150,7 @@ public class SdfsClient implements Runnable{
 		if (chunks == null || chunks.size() == 0)
 			return;
 		
-		clientProtocol.initialize(masterHost, masterPort);
+		//clientProtocol.initialize(masterHost, masterPort);
 		
 		try {
 
@@ -160,6 +165,11 @@ public class SdfsClient implements Runnable{
 			// the first block represent the id of the node to send respective chuncks to
 			// the second block is the id to NodeInfo assignment
 			
+			if (result.equals("")){
+				System.out.println("Unable to execute the put command");
+				return;
+			}
+
 			String [] infoblocks = result.split(FileUtils.INFOBLOCK_DELIM);
 			
 			String [] ids = infoblocks[0].split(FileUtils.LIST_DELIM);
@@ -297,6 +307,28 @@ public class SdfsClient implements Runnable{
 
 	@Override
 	public void run() {
+		
+		//register with master
+		try {
+			String masterResponse = clientProtocol.helloMaster();
+			
+			if (!masterResponse.equals("")){
+				NodeInfo nodeInfo = Helper.extractNodeInfoFromId(masterResponse);
+				
+				secondaryHost = nodeInfo.getHostname();
+				secondaryPort = nodeInfo.getPort();
+				
+				clientProtocol.initializeSecondary(secondaryHost, secondaryPort);
+				
+				System.out.println(String.format("Client - Secondary master: <%s:%d>",
+						secondaryHost,secondaryPort));
+			}else{
+				System.out.println("No secondary master information");
+			}
+			
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
 		
 		BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
 		

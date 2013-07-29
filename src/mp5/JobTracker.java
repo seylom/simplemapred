@@ -11,7 +11,6 @@ import java.util.regex.Pattern;
 
 import mp3.Helper;
 import mp3.NodeInfo;
-import mp4.ClientProtocol;
 import mp4.FileUtils;
 import mp4.SdfsMessageHandler;
 import mp4.SdfsNode;

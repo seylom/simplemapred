@@ -15,6 +15,7 @@ import mp3.NodeInfo;
 
 public class ClientProtocol {
 
+	public static String HELLO_MASTER = "hello_master";
 	public static String PUT_OP = "put_op";
 	public static String GET_OP = "get_op";
 	public static String DEL_OP = "del_op";
@@ -28,6 +29,11 @@ public class ClientProtocol {
 
 	private String masterHost;
 	private int masterPort = 10000;
+	
+	private String secondHost;
+	private int secondPort = 10000;
+	
+	private boolean attemptedSecondary;
 
 	/**
 	 * @param socket
@@ -43,16 +49,26 @@ public class ClientProtocol {
 	 * @param port
 	 *            initializes the master node information for communications
 	 */
-	public synchronized void initialize(String hostname, int port) {
+	public synchronized void initializePrimary(String hostname, int port) {
 		masterHost = hostname;
 		masterPort = port;
+	}
+	
+	/**
+	 * @param hostname
+	 * @param port
+	 *            initializes the master node information for communications
+	 */
+	public synchronized void initializeSecondary(String hostname, int port) {
+		secondHost = hostname;
+		secondPort = port;
 	}
 
 	public String sendMessageToMasterNodeWithResponse(String fileOp,
 			String message) throws ClassNotFoundException {
 
 		System.out.println(String.format(
-				"Client - Sending %s message to <%s:%d>", fileOp, masterHost,
+				"Client - Sending %s command to <%s:%d>", fileOp, masterHost,
 				masterPort));
 
 		String result = "";
@@ -91,13 +107,40 @@ public class ClientProtocol {
 			System.out.println(String.format("The host <%s:%d> cannot be found." +
 					" Please check your master hostname and port",masterHost,masterPort));			
 		} catch (SocketTimeoutException e){
-			System.out.println("Client - TIMEOUT: The master node did not replied in the alloted time.");		
+			result = attempOperationWithSecondary(fileOp,message);
 		}
 		catch (IOException e) {
-			System.out.println("A problem occur during communication with the master node");
+			result = attempOperationWithSecondary(fileOp,message);
 		}
 
 		return result;
+	}
+	
+	/**
+	 * @param fileOp
+	 * @param message
+	 * @return
+	 * @throws ClassNotFoundException
+	 */
+	private String attempOperationWithSecondary(String fileOp,
+			String message) throws ClassNotFoundException{
+		
+		if (!attemptedSecondary){
+			attemptedSecondary = true;
+			
+			System.out.println("Client - A problem occur during communication with the master node");
+			System.out.println("Client - Attempting command with secondary master");
+			
+			masterHost = secondHost;
+			masterPort = secondPort;
+			
+			return sendMessageToMasterNodeWithResponse(fileOp,message);
+		}
+		else{
+			System.out.println("Client - Unable to communicate with primary or secondary.");
+		}
+		
+		return "";
 	}
 
 	/**
@@ -290,10 +333,22 @@ public class ClientProtocol {
 		FileUtils.uploadProgram(exeFile, this.masterHost,this.masterPort);
 	}
 
+	/**
+	 * @return
+	 * @throws ClassNotFoundException
+	 */
 	public String getActiveJobStatus() throws ClassNotFoundException {
 	 
 		String message = String.format("%s", JOB_STATUS);
 		String result = sendMessageToMasterNodeWithResponse("job status request", message);
+		
+		return result;
+	}
+	
+	
+	public String helloMaster() throws ClassNotFoundException{
+		String message = String.format("%s", HELLO_MASTER);
+		String result = sendMessageToMasterNodeWithResponse("Request for secondary master", message);
 		
 		return result;
 	}

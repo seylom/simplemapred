@@ -101,6 +101,8 @@ public class AdvancedTcpManager implements Runnable {
 			doSaveProgram(message, oos, ois);
 		}else if (message.startsWith(ClientProtocol.JOB_STATUS)){
 			doSendJobStatus(message, oos, ois);
+		}else if (message.startsWith(ClientProtocol.HELLO_MASTER)){
+			doSendSecondaryMasterInfo(message, oos, ois);
 		}
 	}
 
@@ -222,8 +224,13 @@ public class AdvancedTcpManager implements Runnable {
 	public void doPut(String message, ObjectOutputStream oos,
 			ObjectInputStream ois) {
 
-		if (!node.getIsMaster())
+		if (!node.getIsAuthorized()){
+			
+			node.log("Unable to honor a request from a non master or secondary node");
+			
 			return;
+		}
+			
 
 		String info[] = message.split(":");
 
@@ -290,7 +297,7 @@ public class AdvancedTcpManager implements Runnable {
 	public void doGet(String message, ObjectOutputStream oos,
 			ObjectInputStream ois) {
 		
-		if (!node.getIsMaster()){	
+		if (!node.getIsAuthorized()){	
 			sendEndOfCommMessage(oos);		
 			return;
 		}
@@ -355,7 +362,7 @@ public class AdvancedTcpManager implements Runnable {
 	 */
 	public void doDelete(String message, ObjectOutputStream oos,
 			ObjectInputStream ois) {
-		if (!node.getIsMaster())
+		if (!node.getIsAuthorized())
 			return;
 
 		sendEndOfCommMessage(oos);
@@ -448,7 +455,7 @@ public class AdvancedTcpManager implements Runnable {
 	public void doMaple(String message, ObjectOutputStream oos,
 			ObjectInputStream ois){
 		
-		if (!node.getIsMaster())
+		if (!node.getIsAuthorized())
 			return;
 		
 		sendEndOfCommMessage(oos);
@@ -460,6 +467,15 @@ public class AdvancedTcpManager implements Runnable {
 		String [] files = info[3].split(FileUtils.LIST_DELIM);
 		
 		ArrayList<String> sdfsFiles = new ArrayList<String>(Arrays.asList(files));
+		
+		//send job information to secondary node for storage.
+		String secondaryNodeMessage = String.format("%s:%s:%s:%s:%s", 
+				SdfsMessageHandler.JOB_INFO,SdfsMessageHandler.MAPLE,exe,prefix,info[3]);
+		
+		NodeInfo secondNodeInfo = Helper.extractNodeInfoFromId(node.getSecondaryMasterId());
+		
+		Helper.sendUnicastMessage(node.getSocket(), secondaryNodeMessage, secondNodeInfo.getHostname(), 
+				secondNodeInfo.getPort());
 		
 		//process maple message
 		node.initializeMapleJob(exe, prefix, sdfsFiles);
@@ -473,7 +489,7 @@ public class AdvancedTcpManager implements Runnable {
 	public void doJuice(String message, ObjectOutputStream oos,
 			ObjectInputStream ois){
 		
-		if (!node.getIsMaster())
+		if (!node.getIsAuthorized())
 			return;
 		
 		sendEndOfCommMessage(oos);
@@ -484,7 +500,16 @@ public class AdvancedTcpManager implements Runnable {
 		int numberOfJuices = Integer.parseInt(info[2]);
 		String prefix = info[3];
 		String destinationSdfs = info[4];
+		
+		//send job information to secondary node for storage.
+		String secondaryNodeMessage = String.format("%s:%s:%s:%s:%s:%s", 
+				SdfsMessageHandler.JOB_INFO,SdfsMessageHandler.JUICE,exe,numberOfJuices,prefix,info[4]);
+		
+		NodeInfo secondNodeInfo = Helper.extractNodeInfoFromId(node.getSecondaryMasterId());
 		 
+		Helper.sendUnicastMessage(node.getSocket(), secondaryNodeMessage, secondNodeInfo.getHostname(), 
+				secondNodeInfo.getPort());
+		
 		//process juice message
 		node.initializeJuiceJob(exe,numberOfJuices, prefix, destinationSdfs);
 	}
@@ -563,12 +588,22 @@ public class AdvancedTcpManager implements Runnable {
 	 */
 	public void doSendJobStatus(String message, ObjectOutputStream oos,
 			ObjectInputStream ois) {
-
-		if (!node.getIsMaster())
-			return;
-
-		String response = "";
 		
+		String response = "";
+
+		if (!node.getIsAuthorized())
+			return;
+		
+		if (node.getIsSecondary() && 
+			node.getJobTracker() == null){
+			
+			System.out.println("Restarting saved job");
+			
+
+			//the master probably crashed - restart the job
+			node.restoreAndExecuteSavedMapleJob();
+		}
+
 		JobTracker tracker = node.getJobTracker();		
 		
 		if (tracker != null){
@@ -580,6 +615,33 @@ public class AdvancedTcpManager implements Runnable {
 				response = SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX;
 			}
 		}
+		
+		try {
+
+			oos.writeObject(response);
+			
+			sendEndOfCommMessage(oos);
+
+			this.node.log("Sending datanode candidates for file storage");
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * @param message
+	 * @param oos
+	 * @param ois
+	 */
+	public void doSendSecondaryMasterInfo(String message, ObjectOutputStream oos,
+			ObjectInputStream ois) {
+
+		if (!node.getIsAuthorized())
+			return;
+
+		String response = String.format("%s", node.getSecondaryMasterId());
 		
 		try {
 

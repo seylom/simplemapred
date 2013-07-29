@@ -39,7 +39,7 @@ public class TestMapleJuice {
 	public void test_maple_execution_from_sdfs_storage() throws InterruptedException {
 		Thread introducerThread = new Thread() {
 			public void run() {
-				new SdfsNode("localhost", 10000, "localhost", 10000, true);
+				new SdfsNode("localhost", 10000, "localhost", 10000, true,5000,true);
 			}
 		};
 

@@ -6,6 +6,7 @@ import java.net.DatagramSocket;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap; 
 import java.util.HashSet; 
 import java.util.Random;
@@ -13,6 +14,7 @@ import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import mp2.TcpConnectionManager;
 import mp3.ClientNode;
 import mp3.Helper;
 import mp3.MessageHandler;
@@ -25,6 +27,7 @@ public class SdfsNode extends ClientNode {
 	private Boolean isMaster = false;
 	private ServerSocket tcpSocket; 
 	private String masterNodeId = "";
+	private String secondaryMasterId = "";
 	 
 	//Holds a mapping of a node to a map of sdfs files with the specific blocks they hold
 	public HashMap<String,HashMap<String,Set<Integer>>> sdfsMetadata;
@@ -37,6 +40,8 @@ public class SdfsNode extends ClientNode {
 	
 	private JobTracker jobTracker;
 	public volatile boolean jobRunning;
+	
+	private String savedJobRequestInfo;
 	
 	/**
 	 * @param hostname
@@ -104,7 +109,8 @@ public class SdfsNode extends ClientNode {
 
 		super.initialize();
 
-		startAdvancedConnectionManager();
+		startSecondaryMasterNodeMonitor();
+		startAdvancedConnectionManager();	
 	}
 	
 	/**
@@ -141,6 +147,18 @@ public class SdfsNode extends ClientNode {
 	public boolean getIsMaster() {
 		return this.isMaster;
 	}
+	
+	public boolean getIsAuthorized(){
+		return getIsMaster() || getIsSecondary();
+	}
+	
+	/**
+	 * 
+	 * @return
+	 */
+	public boolean getIsSecondary() {
+		return getNodeId().equals(getSecondaryMasterId());
+	}
 
 	/**
 	 * @return Gets the master node of the SDFS
@@ -149,6 +167,21 @@ public class SdfsNode extends ClientNode {
 		return this.masterNodeId;
 	}
 
+	/**
+	 * @return
+	 */
+	public JobTracker getJobTracker() {	 
+		return this.jobTracker;
+	}
+
+	public void setSecondaryMasterId(String nodeId) {
+	    secondaryMasterId = nodeId;
+	}
+	
+	public String getSecondaryMasterId(){
+		return secondaryMasterId;
+	}
+	
 	/**
 	 * @param masterId
 	 */
@@ -187,6 +220,9 @@ public class SdfsNode extends ClientNode {
 		}
 	}
 
+	/* (non-Javadoc)
+	 * @see mp3.ClientNode#notifyUnreachable()
+	 */
 	@Override
 	public void notifyUnreachable() {
 		super.notifyUnreachable();
@@ -194,10 +230,31 @@ public class SdfsNode extends ClientNode {
 		if (getTrackedNodeId().equals(getMasterId())) {
 
 			// start election with a coordinate message (ring election)
-			String message = String.format("%s:%s",
-					SdfsMessageHandler.COORD_MESSAGE_PREFIX, getNodeId());
-			sendBMulticastMessage(message);
-			log(String.format("Coord message for new master <%s>", getNodeId()));
+			
+			//force a new node as the master provided it is not the secondary
+			synchronized(membershipList){
+				
+				String activeId = "";
+				
+				if (!getNodeId().equals(getSecondaryMasterId())){
+					activeId = getNodeId();
+				}else{
+					for(String id:membershipList){
+						if (!id.equals(getSecondaryMasterId()) &&
+								!id.equals(getMasterId())){
+							activeId = id;
+						}
+					}
+				}
+				
+				if (!activeId.equals("")){
+					String message = String.format("%s:%s",
+							SdfsMessageHandler.COORD_MESSAGE_PREFIX,activeId);
+					sendBMulticastMessage(message);
+					
+					log(String.format("Coord message for new master <%s>", activeId));
+				}
+			}
 		}
 	}
 
@@ -233,7 +290,6 @@ public class SdfsNode extends ClientNode {
 		}
 	}
 
-	
 	/**
 	 * @param sdfsFileName
 	 * @param chunkIndex
@@ -650,11 +706,10 @@ public class SdfsNode extends ClientNode {
 	 * Initializes maple job for execution across nodes, tracks progress and restart tasks if necessary.
 	 * It also notifies the front-end of job progress.
 	 */
-	public void initializeMapleJob(final String exe,final String prefix,final ArrayList<String> sdfsFiles){
-		
-		if (!getIsMaster())
+	public void initializeMapleJob(final String exe,final String prefix,final ArrayList<String> sdfsFiles){		
+		if (!getIsAuthorized())
 			return;
-		
+
 		if (!jobRunning)
 			jobRunning = true;
 		
@@ -691,7 +746,7 @@ public class SdfsNode extends ClientNode {
 	public void initializeJuiceJob(final String exe,final int numberOfJuices,
 			final String prefix,final String destinationSdfs) {
 		
-		if (!getIsMaster())
+		if (!getIsAuthorized())
 			return;
 
 		jobTracker = new JobTracker(this);
@@ -740,7 +795,7 @@ public class SdfsNode extends ClientNode {
 	 * @param status
 	 */
 	public void saveTaskProgress(String nodeId,int taskId,String taskType, String status){
-		if (!getIsMaster())
+		if (!getIsAuthorized())
 			return;
 			
 		if (jobTracker == null)
@@ -749,6 +804,84 @@ public class SdfsNode extends ClientNode {
 		jobTracker.notifyTaskProgress(nodeId,taskId,taskType, status);
 	}
 
+	/**
+	 * Ask for a secondary master
+	 */
+	public void electSecondary(){	
+		
+		synchronized(membershipList){
+			if (!secondaryMasterId.equals("") && 
+					membershipList.contains(secondaryMasterId)){
+				return;
+			}
+			
+			for (String id:membershipList){
+				
+				if (id.equals(getNodeId()))
+					continue;
+				
+				String message = String.format("%s:%s", SdfsMessageHandler.ELECT_SECONDARY_MESSAGE_PREFIX, id);
+			 
+				NodeInfo nodeInfo = Helper.extractNodeInfoFromId(id);
+				
+				Helper.sendUnicastMessage(getSocket(), message, nodeInfo.getHostname(), nodeInfo.getPort());
+				
+				log("Requesting secondary master for failure tolerance");
+				
+				break;
+			}
+		}
+	}
+	
+	/**
+	 * Start a thread for secondary monitoring
+	 */
+	public void startSecondaryMasterNodeMonitor(){
+		if (!getIsMaster())
+			return;
+		
+		(new Timer()).schedule(new TimerTask() {
+			@Override
+			public void run() {
+				electSecondary();
+			}
+		}, 2000);
+	}
+	
+	/**
+	 * restore and execute save job
+	 */
+	public void restoreAndExecuteSavedMapleJob(){
+		String job = savedJobRequestInfo;
+		
+		String [] info = job.split(FileUtils.INFO_DELIM);
+		
+		if (info[1].equals(SdfsMessageHandler.MAPLE)){
+			String exe = info[2];
+			String prefix = info[3];
+			String [] files = info[4].split(FileUtils.LIST_DELIM);
+			
+			ArrayList<String> sdfsFiles = new ArrayList<String>(Arrays.asList(files));
+
+			//process maple message
+			initializeMapleJob(exe, prefix, sdfsFiles);
+		}else{
+			String exe = info[2];
+			int numberOfJuices = Integer.parseInt(info[3]);
+			String prefix = info[4];
+			String destinationSdfs = info[5];
+			
+			initializeJuiceJob(exe, numberOfJuices, prefix, destinationSdfs);
+		}
+	}
+
+	/**
+	 * @param message
+	 */
+	public void saveJobInfo(String message) {
+		 savedJobRequestInfo = message;
+	}
+	
 	/**
 	 * 
 	 * @param args
@@ -791,12 +924,5 @@ public class SdfsNode extends ClientNode {
 
 		new SdfsNode(hostname, port, introducerHost, introducerPort, isMaster,
 				lifespan, crash);
-	}
-
-	/**
-	 * @return
-	 */
-	public JobTracker getJobTracker() {	 
-		return this.jobTracker;
 	}
 }
