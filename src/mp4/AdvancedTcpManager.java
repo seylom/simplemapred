@@ -19,6 +19,7 @@ import java.util.TreeMap;
 import mp2.GrepHandler;
 import mp3.Helper;
 import mp3.NodeInfo;
+import mp5.JobTracker;
 
 /**
  * handles TCP communication and queries sent to the node
@@ -98,6 +99,8 @@ public class AdvancedTcpManager implements Runnable {
 			doJuice(message, oos, ois);
 		}else if (message.startsWith(FileUtils.SENDING_PROGRAM_PREFIX)){
 			doSaveProgram(message, oos, ois);
+		}else if (message.startsWith(ClientProtocol.JOB_STATUS)){
+			doSendJobStatus(message, oos, ois);
 		}
 	}
 
@@ -208,24 +211,6 @@ public class AdvancedTcpManager implements Runnable {
 		node.addBlockInfo(this.node.getNodeId(), sdfsFileName, chunkIndex,
 				chunkCount);
 
-//		// broadcast chunk reception to the rest of the membership for storage
-//		synchronized (node.membershipList) {
-//
-//			ArrayList<String> recipients = new ArrayList<String>();
-//			for (String nodeId : node.membershipList) {
-//				if (!nodeId.equals(node.getNodeId())) {
-//					recipients.add(nodeId);
-//				}
-//			}
-//
-//			String metadataMessage = String.format("%s:%s:%s:%d:%d",
-//					SdfsMessageHandler.SAVE_BLOCK_META_PREFIX,
-//					node.getNodeId(), sdfsFileName, chunkIndex, chunkCount);
-//
-//			Helper.sendBMulticastMessage(node.getSocket(), metadataMessage,
-//					recipients);
-//		}
-		
 		node.notifyChunckReception( sdfsFileName, chunkIndex, chunkCount);
 	}
 
@@ -571,6 +556,44 @@ public class AdvancedTcpManager implements Runnable {
 		}
 	}
 	
+	/**
+	 * @param message
+	 * @param oos
+	 * @param ois
+	 */
+	public void doSendJobStatus(String message, ObjectOutputStream oos,
+			ObjectInputStream ois) {
+
+		if (!node.getIsMaster())
+			return;
+
+		String response = "";
+		
+		JobTracker tracker = node.getJobTracker();		
+		
+		if (tracker != null){
+			if (tracker.completed){
+				response = SdfsMessageHandler.TASK_REPORT_COMPLETED_PREFIX;
+			}else if (tracker.jobFailed){
+				response = SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX;
+			}else{
+				response = SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX;
+			}
+		}
+		
+		try {
+
+			oos.writeObject(response);
+			
+			sendEndOfCommMessage(oos);
+
+			this.node.log("Sending datanode candidates for file storage");
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 	
 	/**
 	 * @param oos

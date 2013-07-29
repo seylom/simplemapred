@@ -792,4 +792,11 @@ public class SdfsNode extends ClientNode {
 		new SdfsNode(hostname, port, introducerHost, introducerPort, isMaster,
 				lifespan, crash);
 	}
+
+	/**
+	 * @return
+	 */
+	public JobTracker getJobTracker() {	 
+		return this.jobTracker;
+	}
 }

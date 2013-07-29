@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 
 import mp3.Helper;
 import mp3.NodeInfo;
+import mp4.ClientProtocol;
 import mp4.FileUtils;
 import mp4.SdfsMessageHandler;
 import mp4.SdfsNode;
@@ -24,6 +25,8 @@ public class JobTracker {
 	public volatile boolean jobRunning;
 	private HashSet<String> mapleTaskNodes;
 	private HashSet<String> juiceTaskNodes;
+	public volatile boolean jobFailed;
+	private int numberOfTasks = 0;
 	
 	/**
 	 * @param node
@@ -40,6 +43,8 @@ public class JobTracker {
 	 */
 	public void startMapleJob(String exe,String prefix,ArrayList<String> sdfsFiles){
 		jobRunning = true;
+		completed = false;
+		jobFailed = false;
 		mapleTaskNodes = new HashSet<String>();
 		taskToHeartbeatMap = new HashMap<String,TaskHearbeat>();
 		Random rd = new Random();
@@ -73,6 +78,8 @@ public class JobTracker {
 				assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.MAPLE,taskId);
 				
 				taskId+=1;
+				
+				numberOfTasks+=1;
 			}
 		}
 	}
@@ -85,8 +92,11 @@ public class JobTracker {
 	 */
 	public void startJuiceJob(String exe,int numberOfJuices, String prefix, String destinationSdfs){
 		jobRunning = true;
+		completed = false;
+		jobFailed = false;
 		juiceTaskNodes = new HashSet<String>();
 		taskToHeartbeatMap = new HashMap<String,TaskHearbeat>();
+		
 		int taskId = 0;
 		
 		Random rd = new Random();
@@ -144,6 +154,8 @@ public class JobTracker {
 				assignTaskToNode(candidateNodeId,message,SdfsMessageHandler.JUICE,taskId);
 				
 				taskId+=1;
+				
+				numberOfTasks+=1;
 			}
 		}
 	}
@@ -190,11 +202,22 @@ public class JobTracker {
 			
 			String taskName = String.format("%s_%d",taskType, taskId);
 					
-			if (taskToStatusMap.containsKey(taskName)){
-				taskToStatusMap.put(taskName, status);
-			}		
+			taskToStatusMap.put(taskName, status);
 			
-			//TODO: send task progress to client ??
+			boolean allCompleted = true;
+			
+			//check all task status and update flags
+			for(String task:taskToStatusMap.keySet()){
+				if (!taskToStatusMap.get(task).equals(SdfsMessageHandler.TASK_REPORT_COMPLETED_PREFIX)){
+					allCompleted = false;
+					break;
+				}
+			}
+			
+			if (allCompleted && (numberOfTasks == taskToStatusMap.size())){
+				completed = true;
+				jobRunning = false;
+			}
 		}
 	}
 	
@@ -232,6 +255,4 @@ public class JobTracker {
 	public static void main(String[] args){
 		
 	}
-
-
 }

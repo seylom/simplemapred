@@ -28,6 +28,7 @@ public class SdfsClient implements Runnable{
 	private ClientProtocol clientProtocol;
 	private String masterHost;
 	private int masterPort;
+	private boolean stop;
 	
 	/**
 	 * @param masterHostname
@@ -237,6 +238,9 @@ public class SdfsClient implements Runnable{
 			
 			clientProtocol.sendProgram(exe);
 			clientProtocol.sendMapleMessage(exe, prefix, files);
+			
+			pollJobStatus();
+			
 		} catch (ClassNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -259,24 +263,12 @@ public class SdfsClient implements Runnable{
 					Integer.parseInt(numberOfJuices),
 					prefix, destinationSdfs);
 			
+			pollJobStatus();
+			
 		} catch (ClassNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}	
-	}
-	
-	
-	public static void main(String[] args){
-
-		if (args.length < 2){
-			System.out.println("Usage: SdfsClient masterHostname masterPort");
-			System.exit(0);
-		}
-		
-		String hostname = args[0];
-		int port = Integer.parseInt(args[1]);
-		
-		new SdfsClient(hostname,port);	
 	}
 	
 	
@@ -323,5 +315,61 @@ public class SdfsClient implements Runnable{
 				e.printStackTrace();
 			}	
 		}
+	}
+	
+	
+	/**
+	 * Polls for job status information
+	 */
+	private void pollJobStatus(){
+		
+		final int pollInterval = 2000;
+		
+		//poll for job status every 2 second
+		(new Thread(){
+			
+			public void run(){
+				while(!stop){		
+					
+					String status = "...";
+					
+					try {
+						status = clientProtocol.getActiveJobStatus();
+					} catch (ClassNotFoundException e) { 
+						System.out.println("Client - Unable to retrieve job status information");
+					}
+					
+					if (status.equals(SdfsMessageHandler.TASK_REPORT_COMPLETED_PREFIX)){
+						System.out.println("Client - Task completed");
+						break;
+					}else if (status.equals(SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX)) {
+						System.out.println("Client - Task execution failed");
+						break;
+					}else if (status.equals(SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX)){
+						
+					}
+					
+					try {
+						Thread.sleep(pollInterval);
+					} catch (InterruptedException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}).start();	
+	}
+	
+	public static void main(String[] args){
+
+		if (args.length < 2){
+			System.out.println("Usage: SdfsClient masterHostname masterPort");
+			System.exit(0);
+		}
+		
+		String hostname = args[0];
+		int port = Integer.parseInt(args[1]);
+		
+		new SdfsClient(hostname,port);	
 	}
 }

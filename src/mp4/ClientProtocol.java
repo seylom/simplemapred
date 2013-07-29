@@ -22,6 +22,7 @@ public class ClientProtocol {
 	public static String MAPLE_OP = "maple";
 	public static String JUICE_OP = "juice";
 	public static String END_OF_COMM = "completed";
+	public static String JOB_STATUS = "job_status";
 
 	public static boolean stop = false;
 
@@ -287,5 +288,13 @@ public class ClientProtocol {
 	public void sendProgram(String exe) {	
 		File exeFile = new File(exe);
 		FileUtils.uploadProgram(exeFile, this.masterHost,this.masterPort);
+	}
+
+	public String getActiveJobStatus() throws ClassNotFoundException {
+	 
+		String message = String.format("%s", JOB_STATUS);
+		String result = sendMessageToMasterNodeWithResponse("job status request", message);
+		
+		return result;
 	}
 }
