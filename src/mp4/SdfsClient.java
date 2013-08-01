@@ -377,8 +377,11 @@ public class SdfsClient implements Runnable{
 					}else if (status.equals(SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX)) {
 						System.out.println("Client - Task execution failed");
 						break;
-					}else if (status.equals(SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX)){
+					}else if (status.startsWith(SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX)){
 						
+						//System.out.println("Client - Master Response: Ongoing ...");
+						String[] info = status.split(FileUtils.INFO_DELIM);
+						System.out.println(String.format("Client - Busy : remaining tasks: %s",info[1]));
 					}
 					
 					try {

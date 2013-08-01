@@ -612,9 +612,9 @@ public class AdvancedTcpManager implements Runnable {
 			}else if (tracker.jobFailed){
 				response = SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX;
 			}else{
-				response = SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX;
+				response = String.format("%s:%s",SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX ,tracker.remainingTasks);
 			}
-		}
+ 		}
 		
 		try {
 

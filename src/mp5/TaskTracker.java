@@ -7,7 +7,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream; 
+import java.io.InputStream;
 import java.io.SequenceInputStream;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,308 +18,326 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import mp3.Helper;
-import mp3.NodeInfo; 
+import mp3.NodeInfo;
 import mp4.FileUtils;
 import mp4.SdfsMessageHandler;
 import mp4.SdfsNode;
 
 public class TaskTracker {
 
-	private SdfsNode node;
-	private int taskId;
-	private String taskType;
-	private volatile boolean completed;
-	private volatile boolean failed;
+    private final SdfsNode node;
+    private final int taskId;
+    private String taskType;
+    private volatile boolean completed;
+    private volatile boolean failed;
 
-	public static int REPORT_INTERVAL = 3000;
+    public static int REPORT_INTERVAL = 3000;
 
-	public TaskTracker(SdfsNode node, int taskId) {
-		this.node = node;
-		this.taskId = taskId;
-	}
+    public TaskTracker(SdfsNode node, int taskId) {
+        this.node = node;
+        this.taskId = taskId;
+    }
 
-	/**
-	 * @param exe
-	 * @param prefix
-	 * @param filename
-	 */
-	public void startMapleJob(final String exe, final String prefix,
-			final String filename) {
+    /**
+     * @param exe
+     * @param prefix
+     * @param filename
+     */
+    public void startMapleJob(final String exe, final String prefix,
+            final String filename) {
 
-		taskType = SdfsMessageHandler.MAPLE;
+        taskType = SdfsMessageHandler.MAPLE;
 
-		final NodeInfo nodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
-		final String mjStorageFolder = FileUtils
-				.getMapleJuiceStoragePath(nodeInfo) + "_task" + taskId;
-		
-		File mjFolderFile = new File(mjStorageFolder);
-		if (!mjFolderFile.exists());
-			mjFolderFile.mkdirs();
+        final NodeInfo nodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
+        final String mjStorageFolder = FileUtils
+                .getMapleJuiceStoragePath(nodeInfo) + "_task" + taskId;
 
-		String sdfsFolder = FileUtils.getStoragePath(nodeInfo);
-		final String targetFileName = String.format("%s/%s", sdfsFolder,
-				filename);
+        File mjFolderFile = new File(mjStorageFolder);
 
-		String programFolder = FileUtils.getConfigStorageFolder(nodeInfo);
-		final String exePath = String.format("%s/%s", programFolder, exe);
-		
-		//String fullPrefix = prefix + "_task" +  taskId;
+        if (!mjFolderFile.exists());
+        mjFolderFile.mkdirs();
 
-		(new Thread() {
-			public void run() {
-				ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
-						targetFileName, prefix);
-				pb.directory(new File(mjStorageFolder));
-				pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        String sdfsFolder = FileUtils.getStoragePath(nodeInfo);
+        final String targetFileName = String.format("%s/%s", sdfsFolder,
+                filename);
 
-				try {
+        String programFolder = FileUtils.getConfigStorageFolder(nodeInfo);
+        final String exePath = String.format("%s/%s", programFolder, exe);
 
-					launchTaskHeartbeat();
-					Process pc = pb.start();
-					pc.waitFor();
+        //String fullPrefix = prefix + "_task" +  taskId;
 
-					// save results to HDFS - ?
-					File directory = new File(mjStorageFolder);
-					if (directory.exists()) {
-						File[] files = directory.listFiles(new FileFilter() {
-							@Override
-							public boolean accept(File pathname) {
-								return pathname.getName().startsWith(prefix);
-							}
-						});
+        (new Thread() {
+            @Override
+            public void run() {
+                ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
+                        targetFileName, prefix);
+                pb.directory(new File(mjStorageFolder));
+                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
-						if (files.length > 0) {
-							
-							Pattern p = Pattern.compile(".part(\\d+)$");
-							Matcher matcher = p.matcher(filename);
-							
-							int index = 0;
-							
-							if (matcher.find()){
-								String idx = matcher.group(1);
-								
-								index = Integer.parseInt(idx);
-							}
-								
-							for (int k = 0; k < files.length; k++) {
-								String name = files[k].getName();	
-								String sdfsname = name + "_task" + taskId;
-								
-								FileUtils.sendFile(files[k], nodeInfo, sdfsname, index, 0);
-							}	
-						}
-						
-						//cleanup after maple task
-//						if (mjFolderFile.exists());
-//							FileUtils.deleteDirectory(mjFolderFile);
-					}
+                try {
 
-					completed = true;
+                    launchTaskHeartbeat();
+                    Process pc = pb.start();
+                    pc.waitFor();
 
-				} catch (IOException e) {
-					node.log("An error occur during the maple task execution");
-					failed = true;
-				} catch (InterruptedException e) {
-					// TODO Auto-generated catch block
-					//e.printStackTrace();
-				}
-			}
-		}).start();
-	}
+                    // save results to HDFS - ?
+                    File directory = new File(mjStorageFolder);
+                    if (directory.exists()) {
+                        File[] files = directory.listFiles(new FileFilter() {
+                            @Override
+                            public boolean accept(File pathname) {
+                                return pathname.getName().startsWith(prefix);
+                            }
+                        });
 
-	/**
-	 * @param exe
-	 * @param sourceFile
-	 * @param destinationFile
-	 * @throws IOException 
-	 */
-	public void startJuiceJob(final String exe, final String sourceFile,
-			final String destinationFile) throws IOException {
+                        if (files.length > 0) {
 
-		Random rd = new Random();
-		taskType = SdfsMessageHandler.JUICE;
+                            Pattern p = Pattern.compile(".part(\\d+)$");
+                            Matcher matcher = p.matcher(filename);
 
-		NodeInfo nodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
-		final String mjStorageFolder = FileUtils
-				.getMapleJuiceStoragePath(nodeInfo);
-		
-		final String sdfsStorageFolder = FileUtils
-				.getStoragePath(nodeInfo);
+                            int index = 0;
 
-		File mjFolderFile = new File(mjStorageFolder);
-		if (!mjFolderFile.exists());
-			mjFolderFile.mkdirs();
-			
-		////////////////////////////////////////////////////////////////////////
-		//Retrieve file names of map results with the same key
-		ArrayList<String> matchingFiles = new ArrayList<String>();
-		
-		synchronized (node.fileMetadata) {
-			for(String mapFile: node.fileMetadata.keySet()){
-				
-				//System.out.println(mapFile);
-				
-				if (mapFile.startsWith(sourceFile + "_")){
-					matchingFiles.add(mapFile);
-				}
-			}
-		}
-		
-		////////////////////////////////////////////////////////////////////////
-		//request map blocks we don't have 
+                            if (matcher.find()){
+                                String idx = matcher.group(1);
 
-		ArrayList<InputStream> streams =  new ArrayList<InputStream>();
-		
-		for(String mapFile:matchingFiles){
-			
-			HashMap<Integer,Set<String>> blocksLocationMap =  FileUtils.getSdfsFileBlockLocations(node, mapFile);
-			
-			ArrayList<Integer> blockIndexForFile = new ArrayList<Integer>();
-			
-			for(int blockIndex:blocksLocationMap.keySet()){
-				
-				blockIndexForFile.add(blockIndex);
-				
-				Set<String> locations = blocksLocationMap.get(blockIndex);
-				
-				if (locations.contains(node.getNodeId()))
-					continue;
-				
-				ArrayList<String> locationCandidates = new ArrayList<String>(locations);
-				
-				String sourceId = locationCandidates.get(rd.nextInt(locations.size()));
-				
-				NodeInfo sourceInfo = Helper.extractNodeInfoFromId(sourceId);
+                                index = Integer.parseInt(idx);
+                            }
 
-				String downloadFileName  = String.format("%s.part%d", mapFile,blockIndex);
-					
-				ByteArrayOutputStream baos = FileUtils.downloadStream(downloadFileName, sourceInfo);
-				
-				String downloadPath = String.format("%s/%s", sdfsStorageFolder,downloadFileName);
-				
-				FileOutputStream fos = new FileOutputStream(new File(downloadPath));  
-				fos.write(baos.toByteArray()); 
-				fos.flush(); 
-				fos.close();
-				
-				//add block to SDFS metadata
-				node.addBlockInfo(node.getNodeId(), mapFile, blockIndex, 0);
-				
-				//node.notifyChunckReception(mapFile, blockIndex, 0);
-			}
-			
-			//Save block files to local directory
-			for(int blockIndex:blockIndexForFile){
-				String partName = String.format("%s.part%d",mapFile,blockIndex);
-				
-				String blockPath = sdfsStorageFolder;
-				
-				if (!blockPath.equals("")){
-					blockPath =  String.format("%s/%s", blockPath,partName);
-				}else{
-					blockPath = partName;
-				} 
-				
-				File blockFile = new File(blockPath);
-				
-				if (!blockFile.exists()){
-					node.log(String.format("The block file %s was not found on local storage",blockPath));
-					continue;
-				}
-							
-				try {
-					streams.add(new FileInputStream(blockFile));
-				} catch (FileNotFoundException e) {
-					node.log(String.format("The file %s was not found in local storage", blockPath));
-				}
-			}
-		}	
-		
-		SequenceInputStream seqStream = new SequenceInputStream(Collections.enumeration(streams));
-		
-		final String finalSourcePath = String.format("%s/%s.tmp",mjStorageFolder,sourceFile);
-		FileOutputStream outputStream = new FileOutputStream(finalSourcePath);
-		
-		byte[] buffer = new byte[1024];
-		int len;
-		while ((len = seqStream.read(buffer)) != -1) {
-		    outputStream.write(buffer, 0, len);
-		}
-		
-		outputStream.close();
-		seqStream.close();
-		
-		String sdfsFolder = FileUtils.getStoragePath(nodeInfo);
+                            for (int k = 0; k < files.length; k++) {
+                                String name = files[k].getName();
+                                String sdfsname = name + "_task" + taskId;
 
-		final String destinationPath = String.format("%s/%s.part%d", sdfsFolder,
-				destinationFile,taskId);
+                                FileUtils.sendFile(files[k], nodeInfo, sdfsname, index, 0);
+                            }
+                        }
 
-		String programFolder = FileUtils.getConfigStorageFolder(nodeInfo);
-		final String exePath = String.format("%s/%s", programFolder, exe);
+                        //cleanup after maple task
+                        //						if (mjFolderFile.exists());
+                        //							FileUtils.deleteDirectory(mjFolderFile);
+                    }
 
-		
-		/////////////////////////////////////////////////////////////////////////
-		// EXECUTE the actual Juice task
-		(new Thread() {
-			public void run() {
-				ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
-						finalSourcePath, destinationPath);
-				pb.directory(new File(mjStorageFolder));
-				pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    completed = true;
 
-				try {
+                } catch (IOException e) {
+                    node.log("An error occur during the maple task execution");
+                    failed = true;
+                } catch (InterruptedException e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                } catch (Exception ex){
+                    ex.printStackTrace();
+                }
+            }
+        }).start();
+    }
 
-					launchTaskHeartbeat();
-					Process pc = pb.start();
-					pc.waitFor();
-					
-					node.addBlockInfo(node.getNodeId(), destinationFile, taskId, 0); 
-					node.notifyChunckReception(destinationFile, taskId, 0);
+    /**
+     * @param exe
+     * @param sourceFile
+     * @param destinationFile
+     * @throws IOException
+     */
+    public void startJuiceJob(final String exe, final String sourceFile,
+            final String destinationFile) throws IOException {
 
-					completed = true;
+        Random rd = new Random();
+        taskType = SdfsMessageHandler.JUICE;
 
-				} catch (IOException e) {
-					node.log("An error occur during the juice task execution");
-					failed = true;
-				} catch (InterruptedException e) { 
-					//e.printStackTrace();
-				}
-			}
-		}).start();
-	}
+        NodeInfo nodeInfo = Helper.extractNodeInfoFromId(node.getNodeId());
+        final String mjStorageFolder = FileUtils
+                .getMapleJuiceStoragePath(nodeInfo);
 
-	/**
-	 * 
-	 */
-	private void launchTaskHeartbeat() {
-		(new Thread() {
-			@Override
-			public void run() {
-				while (!completed && !failed) {
+        final String sdfsStorageFolder = FileUtils
+                .getStoragePath(nodeInfo);
 
-					node.reportTaskProgress(taskId, taskType,
-							SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX);
+        File mjFolderFile = new File(mjStorageFolder);
 
-					try {
-						Thread.sleep(REPORT_INTERVAL);
-					} catch (InterruptedException e) {
-						// TODO Auto-generated catch block
-						// e.printStackTrace();
-					}
-				}
+        if (!mjFolderFile.exists());
+        mjFolderFile.mkdirs();
 
-				if (completed) {
-					node.reportTaskProgress(taskId, taskType,
-							SdfsMessageHandler.TASK_REPORT_COMPLETED_PREFIX);
-				} else if (failed) {
-					node.reportTaskProgress(taskId, taskType,
-							SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX);
-				}
-			}
-		}).start();
-	}
+        ////////////////////////////////////////////////////////////////////////
+        //Retrieve file names of map results with the same key
+        ArrayList<String> matchingFiles = new ArrayList<String>();
 
-	public static void main(String[] args) {
+        //synchronized (node.fileMetadata) {
+        for(String mapFile: node.fileMetadata.keySet()){
 
-	}
+            //System.out.println(mapFile);
+
+            if (mapFile.startsWith(sourceFile + "_")){
+                matchingFiles.add(mapFile);
+            }
+        }
+        //}
+
+        ////////////////////////////////////////////////////////////////////////
+        //request map blocks we don't have
+
+        ArrayList<InputStream> streams =  new ArrayList<InputStream>();
+
+        for(String mapFile:matchingFiles){
+
+            HashMap<Integer,Set<String>> blocksLocationMap =  FileUtils.getSdfsFileBlockLocations(node, mapFile);
+
+            ArrayList<Integer> blockIndexForFile = new ArrayList<Integer>();
+
+            if (blocksLocationMap == null)
+                System.out.println("Unable to find match in file metadata");
+
+            for(int blockIndex:blocksLocationMap.keySet()){
+
+                blockIndexForFile.add(blockIndex);
+
+                Set<String> locations = blocksLocationMap.get(blockIndex);
+
+                if (locations.contains(node.getNodeId()))
+                    continue;
+
+                ArrayList<String> locationCandidates = new ArrayList<String>(locations);
+
+                String sourceId = locationCandidates.get(rd.nextInt(locations.size()));
+
+                NodeInfo sourceInfo = Helper.extractNodeInfoFromId(sourceId);
+
+                String downloadFileName  = String.format("%s.part%d", mapFile,blockIndex);
+
+                ByteArrayOutputStream baos = FileUtils.downloadStream(downloadFileName, sourceInfo);
+
+                String downloadPath = String.format("%s/%s", sdfsStorageFolder,downloadFileName);
+
+                FileOutputStream fos = new FileOutputStream(new File(downloadPath));
+                fos.write(baos.toByteArray());
+                fos.flush();
+                fos.close();
+
+                //add block to SDFS metadata
+                node.addBlockInfo(node.getNodeId(), mapFile, blockIndex, 0);
+
+                node.notifyChunckReception(mapFile, blockIndex, 0);
+            }
+
+            //Save block files to local directory
+            for(int blockIndex:blockIndexForFile){
+                String partName = String.format("%s.part%d",mapFile,blockIndex);
+
+                String blockPath = sdfsStorageFolder;
+
+                if (!blockPath.equals("")){
+                    blockPath =  String.format("%s/%s", blockPath,partName);
+                }else{
+                    blockPath = partName;
+                }
+
+                File blockFile = new File(blockPath);
+
+                if (!blockFile.exists()){
+                    node.log(String.format("The block file %s was not found on local storage",blockPath));
+                    continue;
+                }
+
+                try {
+                    streams.add(new FileInputStream(blockFile));
+                } catch (FileNotFoundException e) {
+                    node.log(String.format("The file %s was not found in local storage", blockPath));
+                }
+            }
+        }
+
+        SequenceInputStream seqStream = new SequenceInputStream(Collections.enumeration(streams));
+
+        final String finalSourcePath = String.format("%s/%s.tmp",mjStorageFolder,sourceFile);
+        FileOutputStream outputStream = new FileOutputStream(finalSourcePath);
+
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = seqStream.read(buffer)) != -1) {
+            outputStream.write(buffer, 0, len);
+        }
+
+        outputStream.close();
+        seqStream.close();
+
+        String sdfsFolder = FileUtils.getStoragePath(nodeInfo);
+
+        final String destinationPath = String.format("%s/%s.part%d", sdfsFolder,
+                destinationFile,taskId);
+
+        String programFolder = FileUtils.getConfigStorageFolder(nodeInfo);
+        final String exePath = String.format("%s/%s", programFolder, exe);
+
+
+        /////////////////////////////////////////////////////////////////////////
+        // EXECUTE the actual Juice task
+        //        Thread t = new Thread() {
+        //            @Override
+        //            public void run() {
+
+        System.out.println(destinationPath);
+
+        ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
+                finalSourcePath, destinationPath);
+        pb.directory(new File(mjStorageFolder));
+        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+
+        try {
+
+            launchTaskHeartbeat();
+            Process pc = pb.start();
+            pc.waitFor();
+
+            node.addBlockInfo(node.getNodeId(), destinationFile, taskId, 0);
+            node.notifyChunckReception(destinationFile, taskId, 0);
+
+            completed = true;
+
+        } catch (IOException e) {
+            node.log("An error occur during the juice task execution");
+            failed = true;
+        } catch (InterruptedException e) {
+            //e.printStackTrace();
+        } catch (Exception ex){
+            ex.printStackTrace();
+        }
+        //            }
+        //        };
+        //        t.setUncaughtExceptionHandler(FileUtils.GetUncaughtExceptionHandler());
+        //        t.start();
+    }
+
+    /**
+     * 
+     */
+    private void launchTaskHeartbeat() {
+        (new Thread() {
+            @Override
+            public void run() {
+                while (!completed && !failed) {
+
+                    node.reportTaskProgress(taskId, taskType,
+                            SdfsMessageHandler.TASK_REPORT_BUSY_PREFIX);
+
+                    try {
+                        Thread.sleep(REPORT_INTERVAL);
+                    } catch (InterruptedException e) {
+                        // TODO Auto-generated catch block
+                        // e.printStackTrace();
+                    }catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                if (completed) {
+                    node.reportTaskProgress(taskId, taskType,
+                            SdfsMessageHandler.TASK_REPORT_COMPLETED_PREFIX);
+                } else if (failed) {
+                    node.reportTaskProgress(taskId, taskType,
+                            SdfsMessageHandler.TASK_REPORT_FAILED_PREFIX);
+                }
+            }
+        }).start();
+    }
+
+    public static void main(String[] args) {
+
+    }
 }
