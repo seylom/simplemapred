@@ -72,7 +72,7 @@ public class TaskTracker {
                 ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
                         targetFileName, prefix);
                 pb.directory(new File(mjStorageFolder));
-                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                //pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
                 try {
 
@@ -277,7 +277,7 @@ public class TaskTracker {
         ProcessBuilder pb = new ProcessBuilder("java", "-jar", exePath,
                 finalSourcePath, destinationPath);
         pb.directory(new File(mjStorageFolder));
-        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        //pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
         try {
 

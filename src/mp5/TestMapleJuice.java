@@ -20,7 +20,7 @@ public class TestMapleJuice {
 
         ProcessBuilder pb = new ProcessBuilder("java", "-jar", exe , targetfile, prefix);
         pb.directory(new File(workingPath));
-        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+        //pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
 
         try {
             Process pc = pb.start();
