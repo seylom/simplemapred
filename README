@@ -1,5 +1,5 @@
 ******************************************************************************
-*		Maple Juice								
+*	simple map reduce like distributed system
 ******************************************************************************
 *	Seylom Ayivi - Kevin Mason Justice
 ******************************************************************************
@@ -7,7 +7,6 @@
 Compilation instructions:
 
 1- navigate to the MapleJuice folder.
-
 
 compile word count programs using the 4 commands below
 
